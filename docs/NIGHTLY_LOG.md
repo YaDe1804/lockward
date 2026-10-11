@@ -62,3 +62,12 @@ Lauf auf Branch `night/phase1`. Fortschritt nur hier und in `docs/MORNING_REPORT
 - Gate: fmt, clippy `-D warnings`, nextest (39), audit grün.
 - ADR: [006](adr/006-heuristik-v1.md).
 - Nächster Schritt: AP1.6 score.
+
+## 2026-10-12 01:55 +02:00 — AP1.6 score
+
+- Ergebnis: fertig (DoD erfüllt).
+- `score-v1`: Advisory-Punkte gedeckelt bei 70, Heuristik pro Regel einmal gedeckelt bei 60, Paket max 100, Projekt = Maximum.
+- Jeder Advisory- und Heuristik-Fund hat einen deutschen Satz. Zweiter Lauf ist identisch.
+- Gate: fmt, clippy `-D warnings`, Score-Tests grün. Voller nextest folgt mit dem Commit-Gate.
+- ADR: [007](adr/007-score-formel.md).
+- Nächster Schritt: AP1.7 policy.

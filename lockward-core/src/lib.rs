@@ -11,6 +11,7 @@ pub mod heuristics;
 pub mod hooks;
 pub mod ingest;
 pub mod resolve;
+pub mod score;
 
 pub use advisories::{
     Advisory, AdvisoryReport, OsvClient, PackageAdvisories, PackageQuery, ReqwestTransport,
@@ -21,6 +22,10 @@ pub use heuristics::{ENGINE_VERSION, HeuristicFinding, RuleInfo, evaluate, rules
 pub use hooks::{HookFinding, HookProvenance, HookReport, NPM_INSTALL_HOOKS, detect_hooks};
 pub use ingest::{Lockfile, Package, parse_lockfile, parse_lockfile_str};
 pub use resolve::{Cycle, DepKind, Edge, Graph, Node, Unresolved, resolve};
+pub use score::{
+    ADVISORY_CAP, HEURISTIC_CAP, PackageScore, SCORE_VERSION, ScoreReport, advisory_weight, band,
+    score,
+};
 
 /// Library version, recorded in machine-readable reports.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
