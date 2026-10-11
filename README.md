@@ -24,11 +24,14 @@ Datenfluss: `Repo/Lockfile → ingest → resolve → (advisories | hooks | heur
 
 ```powershell
 cargo build --release -p lockward-cli
-cargo run -p lockward-cli -- scan .
 cargo run -p lockward-cli -- --help
+cargo run -p lockward-cli -- scan . --offline
+cargo run -p lockward-cli -- scan . --format json --output report.json
+cargo run -p lockward-cli -- scan . --format all --output .\out
+cargo run -p lockward-cli -- baseline . -o baseline.txt
 ```
 
-`scan` ist im Gerüst von AP1.0 noch ein Platzhalter. Die Analyse folgt in den Modulen danach.
+Exit-Codes: `0` ohne Verstoß, `1` Warnung oder Review, `2` Fail (nur im Modus `enforce`) oder Laufzeitfehler. Der Default-Modus ist `warn`.
 
 ## Qualitätstor
 

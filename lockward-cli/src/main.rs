@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use lockward_core::advisories::ReqwestTransport;
 use lockward_core::policy::{Mode, Outcome, Policy, load_policy, parse_baseline, render_baseline};
+use lockward_core::report::{ReportKind, render};
 use lockward_core::resolve::resolve;
 use lockward_core::scan::{Analysis, AnalyzeOptions, analyze, locate_lockfile};
 use lockward_core::{VERSION, parse_lockfile};
@@ -54,6 +55,15 @@ enum Command {
         /// Baseline-Datei (`name@version` pro Zeile) für neue Abhängigkeiten.
         #[arg(long)]
         baseline: Option<PathBuf>,
+        /// Ausgabeformat. `all` schreibt vier Dateien nach `--output`.
+        #[arg(long, value_enum, default_value = "text")]
+        format: CliFormat,
+        /// Datei oder Verzeichnis für die gewählte Ausgabe.
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// RFC3339-Zeitstempel. Ohne Angabe wird die aktuelle UTC-Zeit verwendet.
+        #[arg(long)]
+        scanned_at: Option<String>,
     },
     /// Schreibt die direkten Abhängigkeiten als Baseline.
     Baseline {
@@ -63,6 +73,22 @@ enum Command {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum CliFormat {
+    /// Kurze deutsche Zusammenfassung auf stdout.
+    Text,
+    /// Markdown für einen PR-Kommentar.
+    Markdown,
+    /// GitHub Step Summary.
+    Summary,
+    /// Maschinenlesbares JSON.
+    Json,
+    /// CycloneDX-1.6-SBOM.
+    Cyclonedx,
+    /// Schreibt Kommentar, Summary, JSON und SBOM.
+    All,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -94,7 +120,20 @@ fn run(command: Command) -> Result<u8> {
             policy,
             mode,
             baseline,
-        } => scan(path, offline, cache_dir, policy, mode, baseline),
+            format,
+            output,
+            scanned_at,
+        } => scan(ScanArgs {
+            path,
+            offline,
+            cache_dir,
+            policy_path: policy,
+            mode,
+            baseline_path: baseline,
+            format,
+            output,
+            scanned_at,
+        }),
         Command::Baseline { path, output } => {
             write_baseline(&path, output.as_deref())?;
             Ok(0)
@@ -102,14 +141,30 @@ fn run(command: Command) -> Result<u8> {
     }
 }
 
-fn scan(
+struct ScanArgs {
     path: PathBuf,
     offline: bool,
     cache_dir: Option<PathBuf>,
     policy_path: Option<PathBuf>,
     mode: Option<CliMode>,
     baseline_path: Option<PathBuf>,
-) -> Result<u8> {
+    format: CliFormat,
+    output: Option<PathBuf>,
+    scanned_at: Option<String>,
+}
+
+fn scan(args: ScanArgs) -> Result<u8> {
+    let ScanArgs {
+        path,
+        offline,
+        cache_dir,
+        policy_path,
+        mode,
+        baseline_path,
+        format,
+        output,
+        scanned_at,
+    } = args;
     let mut policy = match policy_path {
         Some(path) => load_policy(&path).context("Policy konnte nicht geladen werden")?,
         None => Policy::default_policy().context("Standard-Policy fehlt")?,
@@ -142,8 +197,119 @@ fn scan(
         },
     )
     .context("Scan fehlgeschlagen")?;
-    print_summary(&analysis)?;
+    let scanned_at = scanned_at.unwrap_or_else(utc_now);
+    emit_report(&analysis, format, output.as_deref(), &scanned_at)?;
     Ok(analysis.decision.exit_code)
+}
+
+fn emit_report(
+    analysis: &Analysis,
+    format: CliFormat,
+    output: Option<&Path>,
+    scanned_at: &str,
+) -> Result<()> {
+    match format {
+        CliFormat::Text => print_summary(analysis)?,
+        CliFormat::All => {
+            let Some(dir) = output else {
+                return bail_output();
+            };
+            fs::create_dir_all(dir)
+                .with_context(|| format!("Ausgabeverzeichnis {} fehlt", dir.display()))?;
+            write_report(
+                analysis,
+                ReportKind::Markdown,
+                &dir.join("comment.md"),
+                scanned_at,
+            )?;
+            write_report(
+                analysis,
+                ReportKind::Summary,
+                &dir.join("summary.md"),
+                scanned_at,
+            )?;
+            write_report(
+                analysis,
+                ReportKind::Json,
+                &dir.join("report.json"),
+                scanned_at,
+            )?;
+            write_report(
+                analysis,
+                ReportKind::CycloneDx,
+                &dir.join("bom.cdx.json"),
+                scanned_at,
+            )?;
+            print_summary(analysis)?;
+        }
+        other => {
+            let kind = match other {
+                CliFormat::Markdown => ReportKind::Markdown,
+                CliFormat::Summary => ReportKind::Summary,
+                CliFormat::Json => ReportKind::Json,
+                CliFormat::Cyclonedx => ReportKind::CycloneDx,
+                CliFormat::Text | CliFormat::All => unreachable!(),
+            };
+            let text =
+                render(analysis, kind, scanned_at).context("Report konnte nicht erzeugt werden")?;
+            if let Some(path) = output {
+                fs::write(path, text).with_context(|| {
+                    format!("Report {} konnte nicht geschrieben werden", path.display())
+                })?;
+            } else {
+                print!("{text}");
+            }
+        }
+    }
+    Ok(())
+}
+
+fn write_report(
+    analysis: &Analysis,
+    kind: ReportKind,
+    path: &Path,
+    scanned_at: &str,
+) -> Result<()> {
+    let text = render(analysis, kind, scanned_at).context("Report konnte nicht erzeugt werden")?;
+    fs::write(path, text)
+        .with_context(|| format!("Report {} konnte nicht geschrieben werden", path.display()))
+}
+
+fn bail_output() -> Result<()> {
+    anyhow::bail!("--format all braucht --output <verzeichnis>");
+}
+
+fn utc_now() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0);
+    let days = (secs / 86_400) as i64;
+    let tod = secs % 86_400;
+    let (year, month, day) = civil_from_days(days);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        tod / 3600,
+        (tod % 3600) / 60,
+        tod % 60
+    )
+}
+
+/// Howard Hinnant's `civil_from_days`, days since Unix epoch.
+fn civil_from_days(days: i64) -> (i64, u32, u32) {
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let mut year = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    if month <= 2 {
+        year += 1;
+    }
+    (year, month as u32, day as u32)
 }
 
 fn write_baseline(path: &Path, output: Option<&Path>) -> Result<()> {

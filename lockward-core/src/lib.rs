@@ -11,6 +11,7 @@ pub mod heuristics;
 pub mod hooks;
 pub mod ingest;
 pub mod policy;
+pub mod report;
 pub mod resolve;
 pub mod scan;
 pub mod score;

