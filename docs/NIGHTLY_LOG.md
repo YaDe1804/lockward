@@ -100,3 +100,9 @@ Lauf auf Branch `night/phase1`. Fortschritt nur hier und in `docs/MORNING_REPORT
 - Lokaler Smoke `scripts/smoke-action.ps1`: action.yml enthält die Pflichtfelder, Mini-Fixture endet mit Exit 1. Kein Remote, kein echter PR.
 - Der Beispiel-Workflow scannt das saubere `v2-basic.json` mit `comment: false`, damit ein späterer Lauf nicht rot wird.
 - Nächster Schritt: Morning Report.
+
+## 2026-10-12 03:20 +02:00 — Abschluss
+
+- `docs/MORNING_REPORT.md` geschrieben.
+- Finaler Gate nach AP1.9: fmt, clippy `-D warnings`, nextest 53, audit 217 Crates, Smoke Exit 1. Alles grün.
+- Phase 1 bis auf den echten PR-Lauf vorbereitet. Kein Push.
