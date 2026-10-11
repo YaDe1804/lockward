@@ -59,6 +59,15 @@ pub enum Error {
         /// Key inside `packages`.
         package_path: String,
     },
+
+    /// The advisory source rejected a request or returned an unusable body.
+    #[error("advisory request to {url} failed: {message}")]
+    Advisory {
+        /// Request URL.
+        url: String,
+        /// Transport or protocol detail. Does not include response bodies.
+        message: String,
+    },
 }
 
 /// Library result alias.
