@@ -1,0 +1,92 @@
+name: Lockward
+description: Statischer Supply-Chain-Scan für npm-Lockfiles. Mode 1 führt keinen Paketcode aus.
+author: YaDe Labs
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  path:
+    description: Projektverzeichnis oder package-lock.json
+    required: false
+    default: .
+  mode:
+    description: warn oder enforce
+    required: false
+    default: warn
+  policy:
+    description: Optionale YAML-Policy. Leer lässt die eingebaute Warn-First-Policy.
+    required: false
+    default: ""
+  offline:
+    description: Nur den Advisory-Cache verwenden (true/false)
+    required: false
+    default: "false"
+  lockward-bin:
+    description: Pfad oder Name der lockward-Binary
+    required: false
+    default: lockward
+  token:
+    description: Token für den PR-Kommentar
+    required: false
+    default: ${{ github.token }}
+  comment:
+    description: Markdown als PR-Kommentar posten (true/false)
+    required: false
+    default: "true"
+  scanned-at:
+    description: Optionaler RFC3339-Zeitstempel für reproduzierbare Reports
+    required: false
+    default: ""
+
+outputs:
+  exit-code:
+    description: Gate-Exit-Code (0 ok, 1 Warnung, 2 Fail)
+    value: ${{ steps.scan.outputs.exit-code }}
+  report-json:
+    description: Pfad zu report.json
+    value: ${{ steps.scan.outputs.report-json }}
+
+runs:
+  using: composite
+  steps:
+    - id: scan
+      shell: bash
+      env:
+        LOCKWARD_BIN: ${{ inputs.lockward-bin }}
+        LOCKWARD_PATH: ${{ inputs.path }}
+        LOCKWARD_MODE: ${{ inputs.mode }}
+        LOCKWARD_POLICY: ${{ inputs.policy }}
+        LOCKWARD_OFFLINE: ${{ inputs.offline }}
+        LOCKWARD_SCANNED_AT: ${{ inputs.scanned-at }}
+        LOCKWARD_COMMENT: ${{ inputs.comment }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+        out="${RUNNER_TEMP:-/tmp}/lockward-out"
+        mkdir -p "$out"
+        args=(scan "$LOCKWARD_PATH" --format all --output "$out" --mode "$LOCKWARD_MODE")
+        if [ -n "$LOCKWARD_POLICY" ]; then
+          args+=(--policy "$LOCKWARD_POLICY")
+        fi
+        if [ "$LOCKWARD_OFFLINE" = "true" ]; then
+          args+=(--offline)
+        fi
+        if [ -n "$LOCKWARD_SCANNED_AT" ]; then
+          args+=(--scanned-at "$LOCKWARD_SCANNED_AT")
+        fi
+        set +e
+        "$LOCKWARD_BIN" "${args[@]}"
+        code=$?
+        set -e
+        if [ -n "${GITHUB_OUTPUT:-}" ]; then
+          echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+          echo "report-json=$out/report.json" >> "$GITHUB_OUTPUT"
+        fi
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -f "$out/summary.md" ]; then
+          cat "$out/summary.md" >> "$GITHUB_STEP_SUMMARY"
+        fi
+        if [ "$LOCKWARD_COMMENT" = "true" ] && [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ]; then
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file "$out/comment.md"
+        fi
+        exit "$code"
