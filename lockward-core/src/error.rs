@@ -68,6 +68,15 @@ pub enum Error {
         /// Transport or protocol detail. Does not include response bodies.
         message: String,
     },
+
+    /// A policy file could not be parsed or used.
+    #[error("invalid policy {path}: {message}")]
+    Policy {
+        /// Policy path or label.
+        path: String,
+        /// Parser or validation detail.
+        message: String,
+    },
 }
 
 /// Library result alias.
