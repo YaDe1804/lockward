@@ -1,0 +1,30 @@
+name: Example Lockward
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  lockward:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build lockward
+        run: cargo build --release -p lockward-cli
+
+      - name: Scan a clean lockfile
+        uses: ./.github/actions/lockward
+        with:
+          path: lockward-core/tests/fixtures/ingest/v2-basic.json
+          mode: warn
+          offline: "true"
+          comment: "false"
+          lockward-bin: target/release/lockward
+          scanned-at: "2026-10-12T00:00:00Z"

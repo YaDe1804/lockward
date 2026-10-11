@@ -91,3 +91,12 @@ Lauf auf Branch `night/phase1`. Fortschritt nur hier und in `docs/MORNING_REPORT
 - Gate: fmt, clippy `-D warnings`, nextest (53), audit (217 Crates) grün.
 - ADR: [009](adr/009-reports-und-cyclonedx.md). MSRV auf 1.89, weil `uuid` 1.28 das verlangt.
 - Nächster Schritt: AP1.9 GitHub Action, lokal vorbereiten.
+
+## 2026-10-12 03:05 +02:00 — AP1.9 GitHub Action
+
+- Ergebnis: vorbereitet, nicht auf einem echten PR gelaufen.
+- Composite Action `.github/actions/lockward` (action.yml ist das Marketplace-Manifest), Beispiel-Workflow, README.
+- Die Action schreibt `comment.md` / `summary.md` / `report.json` / `bom.cdx.json`, hängt die Summary an `GITHUB_STEP_SUMMARY` und kommentiert einen PR nur, wenn `comment=true` und das Event `pull_request` ist.
+- Lokaler Smoke `scripts/smoke-action.ps1`: action.yml enthält die Pflichtfelder, Mini-Fixture endet mit Exit 1. Kein Remote, kein echter PR.
+- Der Beispiel-Workflow scannt das saubere `v2-basic.json` mit `comment: false`, damit ein späterer Lauf nicht rot wird.
+- Nächster Schritt: Morning Report.
