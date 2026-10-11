@@ -1,0 +1,58 @@
+{
+  "name": "nested-app",
+  "version": "0.1.0",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {
+    "": {
+      "name": "nested-app",
+      "version": "0.1.0",
+      "dependencies": {
+        "foo": "^1.0.0",
+        "bar": "^1.0.0"
+      },
+      "optionalDependencies": {
+        "fsevents": "^2.3.3"
+      }
+    },
+    "node_modules/bar": {
+      "version": "1.5.0",
+      "resolved": "https://registry.npmjs.org/bar/-/bar-1.5.0.tgz",
+      "integrity": "sha512-bar1"
+    },
+    "node_modules/foo": {
+      "version": "1.0.0",
+      "resolved": "https://registry.npmjs.org/foo/-/foo-1.0.0.tgz",
+      "integrity": "sha512-foo",
+      "dependencies": {
+        "bar": "^2.0.0"
+      },
+      "peerDependencies": {
+        "react": "^18.0.0"
+      }
+    },
+    "node_modules/foo/node_modules/bar": {
+      "version": "2.0.0",
+      "resolved": "https://registry.npmjs.org/bar/-/bar-2.0.0.tgz",
+      "integrity": "sha512-bar2"
+    },
+    "node_modules/fsevents": {
+      "version": "2.3.3",
+      "resolved": "https://registry.npmjs.org/fsevents/-/fsevents-2.3.3.tgz",
+      "integrity": "sha512-fs",
+      "optional": true
+    },
+    "node_modules/orphan": {
+      "name": "orphan",
+      "version": "9.9.9",
+      "resolved": "https://registry.npmjs.org/orphan/-/orphan-9.9.9.tgz",
+      "integrity": "sha512-orphan"
+    },
+    "node_modules/react": {
+      "version": "18.3.1",
+      "resolved": "https://registry.npmjs.org/react/-/react-18.3.1.tgz",
+      "integrity": "sha512-react",
+      "peer": true
+    }
+  }
+}

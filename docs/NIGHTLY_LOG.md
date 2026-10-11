@@ -23,3 +23,13 @@ Lauf auf Branch `night/phase1`. Fortschritt nur hier und in `docs/MORNING_REPORT
 - Gate: fmt, clippy `-D warnings`, nextest, audit grün.
 - ADR: [002](adr/002-npm-lockfile-modell.md).
 - Nächster Schritt: AP1.2 resolve, danach AP1.4 hooks.
+
+## 2026-10-12 00:50 +02:00 — AP1.2 resolve
+
+- Ergebnis: fertig (DoD erfüllt).
+- Graph über Node-`node_modules`-Walk. Direkt vs. erreichbar vs. unerreichbar getrennt.
+- Zyklen werden aufgezeichnet und brechen den Aufbau nicht ab. Fehlende Ziele landen in `unresolved`.
+- Fixtures: `nested` (verschachtelte Kopie, Peer, Optional, Orphan), `cycle`.
+- Gate: fmt, clippy `-D warnings`, nextest (17), audit grün.
+- ADR: [003](adr/003-dependency-graph.md).
+- Nächster Schritt: AP1.4 hooks (parallel vorgesehen, nach AP1.2 committet).
