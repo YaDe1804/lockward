@@ -44,3 +44,12 @@ Lauf auf Branch `night/phase1`. Fortschritt nur hier und in `docs/MORNING_REPORT
 - Gate: fmt, clippy `-D warnings`, nextest (21), audit grün.
 - ADR: [004](adr/004-hooks-statisch.md). `prepare` bewusst nicht enthalten.
 - Nächster Schritt: AP1.3 advisories.
+
+## 2026-10-12 01:25 +02:00 — AP1.3 advisories
+
+- Ergebnis: fertig (DoD erfüllt).
+- OSV-Batch plus Vuln-Detail, mockbarer `HttpTransport`, Datei-Cache, Offline-Lauf.
+- Fixture mappt `lodash@4.17.20` auf `GHSA-35jh-r3h4-6jhm` / `CVE-2021-23337` mit Schwere high, plus einen Critical-CVSS-Vektor (9.8). Kein Live-Netz im Test.
+- Gate: fmt, clippy `-D warnings`, nextest, audit (208 Crates) grün.
+- ADR: [005](adr/005-osv-cache.md).
+- Nächster Schritt: AP1.5 heuristics.

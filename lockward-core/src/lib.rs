@@ -5,11 +5,16 @@
 
 #![forbid(unsafe_code)]
 
+pub mod advisories;
 pub mod error;
 pub mod hooks;
 pub mod ingest;
 pub mod resolve;
 
+pub use advisories::{
+    Advisory, AdvisoryReport, OsvClient, PackageAdvisories, PackageQuery, ReqwestTransport,
+    Severity, package_queries,
+};
 pub use error::{Error, Result};
 pub use hooks::{HookFinding, HookProvenance, HookReport, NPM_INSTALL_HOOKS, detect_hooks};
 pub use ingest::{Lockfile, Package, parse_lockfile, parse_lockfile_str};
