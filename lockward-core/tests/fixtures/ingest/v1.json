@@ -1,0 +1,10 @@
+{
+  "name": "old-app",
+  "version": "1.0.0",
+  "lockfileVersion": 1,
+  "dependencies": {
+    "lodash": {
+      "version": "4.17.21"
+    }
+  }
+}

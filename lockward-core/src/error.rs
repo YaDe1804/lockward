@@ -17,6 +17,48 @@ pub enum Error {
         #[source]
         source: std::io::Error,
     },
+
+    /// A file was not valid JSON.
+    #[error("invalid JSON in {path}: {source}")]
+    Json {
+        /// File the JSON was read from.
+        path: String,
+        /// Serde parse error.
+        #[source]
+        source: serde_json::Error,
+    },
+
+    /// `lockfileVersion` was absent.
+    #[error("lockfile {path} is missing lockfileVersion")]
+    MissingLockfileVersion {
+        /// Lockfile path or label.
+        path: String,
+    },
+
+    /// Only npm lockfile versions 2 and 3 are accepted in phase 1.
+    #[error("unsupported lockfileVersion {version} in {path}; expected 2 or 3")]
+    UnsupportedLockfile {
+        /// Lockfile path or label.
+        path: String,
+        /// Value found in the file.
+        version: u64,
+    },
+
+    /// The v2/v3 `packages` map was absent.
+    #[error("lockfile {path} is missing the packages map")]
+    MissingPackages {
+        /// Lockfile path or label.
+        path: String,
+    },
+
+    /// A package entry could not be named.
+    #[error("package `{package_path}` in {path} has no name")]
+    MissingPackageName {
+        /// Lockfile path or label.
+        path: String,
+        /// Key inside `packages`.
+        package_path: String,
+    },
 }
 
 /// Library result alias.
