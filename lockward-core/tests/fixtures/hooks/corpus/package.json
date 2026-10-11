@@ -1,0 +1,8 @@
+{
+  "name": "corpus-app",
+  "version": "1.0.0",
+  "scripts": {
+    "preinstall": "echo root-preinstall",
+    "test": "echo not-a-hook"
+  }
+}

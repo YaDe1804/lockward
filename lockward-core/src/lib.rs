@@ -6,10 +6,12 @@
 #![forbid(unsafe_code)]
 
 pub mod error;
+pub mod hooks;
 pub mod ingest;
 pub mod resolve;
 
 pub use error::{Error, Result};
+pub use hooks::{HookFinding, HookProvenance, HookReport, NPM_INSTALL_HOOKS, detect_hooks};
 pub use ingest::{Lockfile, Package, parse_lockfile, parse_lockfile_str};
 pub use resolve::{Cycle, DepKind, Edge, Graph, Node, Unresolved, resolve};
 

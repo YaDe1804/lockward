@@ -33,3 +33,14 @@ Lauf auf Branch `night/phase1`. Fortschritt nur hier und in `docs/MORNING_REPORT
 - Gate: fmt, clippy `-D warnings`, nextest (17), audit grün.
 - ADR: [003](adr/003-dependency-graph.md).
 - Nächster Schritt: AP1.4 hooks (parallel vorgesehen, nach AP1.2 committet).
+
+## 2026-10-12 01:05 +02:00 — AP1.4 hooks
+
+- Ergebnis: fertig (DoD erfüllt).
+- Liest `preinstall`/`install`/`postinstall` aus `package.json` der Lockfile-Pfade. Keine Ausführung, keine Symlinks.
+- `hasInstallScript` ohne Körper bleibt ein Fund (keine False Negatives auf dem Korpus).
+- Benigne `test`/`build`-Skripte erzeugen keinen Fund. Kaputtes JSON wird zur Warnung.
+- Korpus: Root, left-pad, triple (alle drei Hooks), `@scope/tool`, flagged, broken-manifest, benign-tool.
+- Gate: fmt, clippy `-D warnings`, nextest (21), audit grün.
+- ADR: [004](adr/004-hooks-statisch.md). `prepare` bewusst nicht enthalten.
+- Nächster Schritt: AP1.3 advisories.
