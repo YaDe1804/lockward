@@ -74,7 +74,7 @@ pub fn evaluate(hooks: &[HookFinding]) -> Vec<HeuristicFinding> {
         }
         for rule in COMPILED.iter() {
             if let Some(mat) = rule.pattern.find(&hook.raw) {
-                let evidence = clip_evidence(mat.as_str());
+                let evidence = clip_evidence(&hook.raw[mat.start()..]);
                 let explanation = format!(
                     "Paket {}@{} Hook `{}`: {}. Beleg: `{evidence}`.",
                     hook.package_name, hook.package_version, hook.hook, rule.reason,

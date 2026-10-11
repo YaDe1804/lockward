@@ -71,3 +71,13 @@ Lauf auf Branch `night/phase1`. Fortschritt nur hier und in `docs/MORNING_REPORT
 - Gate: fmt, clippy `-D warnings`, Score-Tests grün. Voller nextest folgt mit dem Commit-Gate.
 - ADR: [007](adr/007-score-formel.md).
 - Nächster Schritt: AP1.7 policy.
+
+## 2026-10-12 02:20 +02:00 — AP1.7 policy
+
+- Ergebnis: fertig (DoD erfüllt).
+- Default-Policy YAML, eigene Policy ladbar, Warn-First senkt Fail/Review auf Warn (Exit 1). Enforce: Fail → Exit 2.
+- Allowlist für Install-Hooks, Domain-Allowlist für Outbound, Baseline für neue direkte Abhängigkeiten, High-Advisories, Secret-Pfade.
+- `lockward scan --offline` und `lockward baseline`. CLI-Tests: sauberes Projekt Exit 0, Korpus Exit 1, Enforce-Fail Exit 2.
+- Gate: fmt, clippy `-D warnings`, nextest (51), audit (215 Crates) grün.
+- ADR: [008](adr/008-policy-warn-first.md). MSRV auf 1.86 wegen `noyalib` 0.0.57.
+- Nächster Schritt: AP1.8 report.
