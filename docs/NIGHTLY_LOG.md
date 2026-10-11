@@ -53,3 +53,12 @@ Lauf auf Branch `night/phase1`. Fortschritt nur hier und in `docs/MORNING_REPORT
 - Gate: fmt, clippy `-D warnings`, nextest, audit (208 Crates) grün.
 - ADR: [005](adr/005-osv-cache.md).
 - Nächster Schritt: AP1.5 heuristics.
+
+## 2026-10-12 01:40 +02:00 — AP1.5 heuristics
+
+- Ergebnis: fertig (DoD erfüllt).
+- Engine `heuristics-v1` mit LW-H001 bis LW-H006. Pro Regel ein Test plus inertes Beispiel. Benigne Hooks (`node-gyp`, `echo`, `tsconfig`) bleiben ohne Fund.
+- Erklärung ist ein deutscher Satz mit Paket, Hook und Beleg.
+- Gate: fmt, clippy `-D warnings`, nextest (39), audit grün.
+- ADR: [006](adr/006-heuristik-v1.md).
+- Nächster Schritt: AP1.6 score.
