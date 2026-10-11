@@ -59,6 +59,27 @@ fn enforce_fail_policy_exits_2() {
 }
 
 #[test]
+fn json_report_is_machine_readable() {
+    let mini = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../lockward-core/tests/fixtures/report/mini");
+    lockward()
+        .args([
+            "scan",
+            mini.to_str().expect("utf-8 path"),
+            "--offline",
+            "--format",
+            "json",
+            "--scanned-at",
+            "2026-10-12T00:00:00Z",
+        ])
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains("\"project_score\": 50"))
+        .stdout(predicate::str::contains("\"exit_code\": 1"))
+        .stdout(predicate::str::contains("2026-10-12T00:00:00Z"));
+}
+
+#[test]
 fn clean_project_exits_ok() {
     let dir = std::env::temp_dir().join(format!("lockward-cli-clean-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);

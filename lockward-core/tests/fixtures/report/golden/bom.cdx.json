@@ -1,0 +1,47 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "c2fda65af240ddcc03e4b276f8654fb3fba2cb6a552cc867b9c39a01525c1a5a73886d60b2e4d156f9f320686cac958642023c959d8c0f8367c80cccdf6aa162"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "name": "left-pad",
+      "purl": "pkg:npm/left-pad@1.0.0",
+      "scope": "required",
+      "type": "library",
+      "version": "1.0.0"
+    }
+  ],
+  "metadata": {
+    "component": {
+      "name": "mini-app",
+      "purl": "pkg:npm/mini-app@1.0.0",
+      "type": "application",
+      "version": "1.0.0"
+    },
+    "timestamp": "2026-10-12T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "author": "YaDe Labs",
+          "name": "lockward",
+          "type": "application",
+          "version": "0.1.0"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:3ef5a295-148a-585a-be59-86e34a113ff3",
+  "specVersion": "1.6",
+  "version": 1
+}

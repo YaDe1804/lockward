@@ -81,3 +81,13 @@ Lauf auf Branch `night/phase1`. Fortschritt nur hier und in `docs/MORNING_REPORT
 - Gate: fmt, clippy `-D warnings`, nextest (51), audit (215 Crates) grün.
 - ADR: [008](adr/008-policy-warn-first.md). MSRV auf 1.86 wegen `noyalib` 0.0.57.
 - Nächster Schritt: AP1.8 report.
+
+## 2026-10-12 02:45 +02:00 — AP1.8 report
+
+- Ergebnis: fertig (DoD erfüllt).
+- Vier Formate: PR-Markdown, Step Summary, JSON, CycloneDX 1.6. Golden-Files unter `lockward-core/tests/fixtures/report/golden`.
+- CLI: `--format text|markdown|summary|json|cyclonedx|all` und `--output`. JSON-Test prüft Score 50 und Exit 1 am Mini-Fixture.
+- CycloneDX: `bomFormat`, `specVersion` 1.6, purl, SHA-512 aus der Fixture-Integrity. Seriennummer ist UUID v5.
+- Gate: fmt, clippy `-D warnings`, nextest (53), audit (217 Crates) grün.
+- ADR: [009](adr/009-reports-und-cyclonedx.md). MSRV auf 1.89, weil `uuid` 1.28 das verlangt.
+- Nächster Schritt: AP1.9 GitHub Action, lokal vorbereiten.

