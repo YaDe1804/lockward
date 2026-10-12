@@ -32,3 +32,21 @@ jobs:
 
       - name: Audit
         run: cargo audit
+
+      - name: CycloneDX 1.6 schema
+        run: |
+          set -euo pipefail
+          mkdir -p target/cdx-schema
+          curl -fsSL -o target/cdx-schema/bom-1.6.schema.json \
+            https://raw.githubusercontent.com/CycloneDX/specification/1.6.1/schema/bom-1.6.schema.json
+          curl -fsSL -o target/cdx-schema/spdx.schema.json \
+            https://raw.githubusercontent.com/CycloneDX/specification/1.6.1/schema/spdx.schema.json
+          set +e
+          cargo run --locked --bin lockward -- scan lockward-core/tests/fixtures/report/licenses --offline --format cyclonedx --output target/licenses.cdx.json
+          code=$?
+          set -e
+          if [ "$code" -gt 1 ]; then
+            exit "$code"
+          fi
+          python -m pip install --disable-pip-version-check check-jsonschema
+          check-jsonschema --schemafile target/cdx-schema/bom-1.6.schema.json target/licenses.cdx.json
