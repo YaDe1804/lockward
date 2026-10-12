@@ -12,8 +12,8 @@ permissions:
   pull-requests: write
 
 steps:
-  - uses: actions/checkout@v4
-  - uses: dtolnay/rust-toolchain@stable
+  - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+  - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
   - run: cargo build --release -p lockward-cli
   - uses: ./.github/actions/lockward
     with:
