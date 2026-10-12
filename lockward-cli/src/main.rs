@@ -15,6 +15,8 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use time::OffsetDateTime;
+use time::macros::format_description;
 use tracing_subscriber::EnvFilter;
 
 /// Supply-Chain-Firewall und Backdoor-Risiko-Scanner.
@@ -280,36 +282,10 @@ fn bail_output() -> Result<()> {
 }
 
 fn utc_now() -> String {
-    let secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
-        .unwrap_or(0);
-    let days = (secs / 86_400) as i64;
-    let tod = secs % 86_400;
-    let (year, month, day) = civil_from_days(days);
-    format!(
-        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
-        tod / 3600,
-        (tod % 3600) / 60,
-        tod % 60
-    )
-}
-
-/// Howard Hinnant's `civil_from_days`, days since Unix epoch.
-fn civil_from_days(days: i64) -> (i64, u32, u32) {
-    let z = days + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = (z - era * 146_097) as u64;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
-    let mut year = yoe as i64 + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = doy - (153 * mp + 2) / 5 + 1;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 };
-    if month <= 2 {
-        year += 1;
-    }
-    (year, month as u32, day as u32)
+    let format = format_description!("[year]-[month]-[day]T[hour]:[minute]:[second]Z");
+    OffsetDateTime::now_utc()
+        .format(&format)
+        .expect("RFC3339 UTC timestamp")
 }
 
 fn write_baseline(path: &Path, output: Option<&Path>) -> Result<()> {
@@ -418,4 +394,18 @@ fn init_tracing(verbose: u8) {
         .with_writer(std::io::stderr)
         .try_init()
         .ok();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::utc_now;
+
+    #[test]
+    fn utc_now_is_rfc3339_utc() {
+        let text = utc_now();
+        assert_eq!(text.len(), 20, "{text}");
+        assert!(text.ends_with('Z'), "{text}");
+        assert!(!text.contains('.'), "{text}");
+        assert_eq!(&text[10..11], "T");
+    }
 }
