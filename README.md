@@ -86,10 +86,10 @@ Each release ships a `SHA256SUMS` file and a keyless **Sigstore** signature
 (`SHA256SUMS.cosign.bundle`), produced in CI via GitHub OIDC — no private keys involved.
 
 ```bash
-# 1) Checksums prüfen
-sha256sum -c SHA256SUMS            # bzw. shasum -a 256 -c SHA256SUMS (macOS)
+# 1) Verify the checksums
+sha256sum -c SHA256SUMS            # or: shasum -a 256 -c SHA256SUMS (macOS)
 
-# 2) Signatur der Checksums-Datei prüfen (cosign erforderlich)
+# 2) Verify the signature over the checksums file (requires cosign)
 cosign verify-blob \
   --bundle SHA256SUMS.cosign.bundle \
   --certificate-identity-regexp "^https://github.com/YaDe1804/lockward/\.github/workflows/release\.yml@refs/tags/" \
