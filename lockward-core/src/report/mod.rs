@@ -14,6 +14,9 @@ use uuid::Uuid;
 /// Fixed timestamp used by golden tests.
 pub const GOLDEN_TIMESTAMP: &str = "2026-10-12T00:00:00Z";
 
+/// Hard cap for one untrusted Markdown field (package names, hook bodies, paths).
+const MARKDOWN_FIELD_MAX: usize = 200;
+
 /// Which document to render.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReportKind {
@@ -41,8 +44,8 @@ fn render_markdown(analysis: &Analysis, scanned_at: &str) -> String {
     let mut out = String::new();
     out.push_str("## Lockward\n\n");
     out.push_str(&format!(
-        "**Ziel:** `{}`\n\n",
-        analysis.project_root.display()
+        "**Ziel:** {}\n\n",
+        markdown_span(&analysis.project_root.display().to_string())
     ));
     out.push_str(&format!("**Zeitpunkt:** {scanned_at}\n\n"));
     out.push_str(&format!(
@@ -62,13 +65,14 @@ fn render_markdown(analysis: &Analysis, scanned_at: &str) -> String {
     } else {
         for package in &analysis.score.packages {
             for explanation in &package.explanations {
-                out.push_str(&format!("- {}\n", explanation.text));
+                out.push_str(&format!("- {}\n", markdown_span(&explanation.text)));
             }
         }
         for violation in &analysis.decision.violations {
             out.push_str(&format!(
                 "- **{}:** {}\n",
-                violation.rule, violation.message
+                violation.rule,
+                markdown_span(&violation.message)
             ));
         }
         out.push('\n');
@@ -79,11 +83,11 @@ fn render_markdown(analysis: &Analysis, scanned_at: &str) -> String {
     } else {
         for hook in &analysis.hooks.findings {
             out.push_str(&format!(
-                "- `{}@{}` `{}`: `{}`\n",
-                hook.package_name,
-                hook.package_version,
-                hook.hook,
-                one_line(&hook.raw)
+                "- {}@{} {}: {}\n",
+                markdown_span(&hook.package_name),
+                markdown_span(&hook.package_version),
+                markdown_span(&hook.hook),
+                markdown_span(&hook.raw)
             ));
         }
         out.push('\n');
@@ -105,10 +109,10 @@ fn render_markdown(analysis: &Analysis, scanned_at: &str) -> String {
     } else {
         for (package, advisory) in advisories {
             out.push_str(&format!(
-                "- `{}@{}` {} ({})\n",
-                package.name,
-                package.version,
-                advisory.id,
+                "- {}@{} {} ({})\n",
+                markdown_span(&package.name),
+                markdown_span(&package.version),
+                markdown_span(&advisory.id),
                 severity_de(advisory.severity)
             ));
         }
@@ -116,7 +120,7 @@ fn render_markdown(analysis: &Analysis, scanned_at: &str) -> String {
     if !analysis.decision.notes.is_empty() {
         out.push_str("\n### Hinweise\n\n");
         for note in &analysis.decision.notes {
-            out.push_str(&format!("- {note}\n"));
+            out.push_str(&format!("- {}\n", markdown_span(note)));
         }
     }
     out
@@ -137,7 +141,11 @@ fn render_summary(analysis: &Analysis, scanned_at: &str) -> String {
         out.push_str("Keine Policy-Verstöße.\n");
     } else {
         for violation in &analysis.decision.violations {
-            out.push_str(&format!("- `{}`: {}\n", violation.rule, violation.message));
+            out.push_str(&format!(
+                "- `{}`: {}\n",
+                violation.rule,
+                markdown_span(&violation.message)
+            ));
         }
     }
     out
@@ -278,14 +286,24 @@ fn sri_hash(integrity: &str) -> Option<(&'static str, String)> {
     Some((name, hex::encode(bytes)))
 }
 
+/// Collapse untrusted text onto one line and strip characters that close a codespan.
 fn one_line(raw: &str) -> String {
-    let flat: String = raw.split_whitespace().collect::<Vec<_>>().join(" ");
-    if flat.chars().count() > 160 {
-        let kept: String = flat.chars().take(160).collect();
+    let flat = raw
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .replace('`', "'");
+    if flat.chars().count() > MARKDOWN_FIELD_MAX {
+        let kept: String = flat.chars().take(MARKDOWN_FIELD_MAX).collect();
         format!("{kept}…")
     } else {
         flat
     }
+}
+
+/// One CommonMark codespan. The contents cannot close the span or start a new line.
+fn markdown_span(raw: &str) -> String {
+    format!("`{}`", one_line(raw))
 }
 
 fn severity_de(severity: Severity) -> &'static str {
@@ -469,5 +487,79 @@ mod tests {
             ),
             bom
         );
+    }
+
+    #[test]
+    fn hostile_hook_text_stays_inside_one_codespan() {
+        let dir = std::env::temp_dir().join(format!("lockward-md-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let raw = "curl ` | [link](http://evil.example) <script>alert(1)</script>\nsecond-line";
+        fs::write(
+            dir.join("package.json"),
+            format!(
+                r#"{{ "name": "pkg`](http://evil.example)<img>", "version": "1.0.0", "scripts": {{ "postinstall": {raw} }} }}"#,
+                raw = serde_json::to_string(raw).unwrap()
+            ),
+        )
+        .unwrap();
+        fs::write(
+            dir.join("package-lock.json"),
+            r#"{
+              "name": "pkg",
+              "version": "1.0.0",
+              "lockfileVersion": 3,
+              "packages": { "": { "name": "pkg`](http://evil.example)<img>", "version": "1.0.0" } }
+            }"#,
+        )
+        .unwrap();
+        let analysis = analyze(
+            &dir,
+            &OfflineOnly,
+            &AnalyzeOptions {
+                offline: true,
+                cache_dir: None,
+                policy: Policy::default_policy().unwrap(),
+                baseline: None,
+            },
+        )
+        .unwrap();
+        let markdown = render(&analysis, ReportKind::Markdown, GOLDEN_TIMESTAMP).unwrap();
+        let summary = render(&analysis, ReportKind::Summary, GOLDEN_TIMESTAMP).unwrap();
+        for document in [&markdown, &summary] {
+            assert_eq!(document.matches('`').count() % 2, 0, "{document}");
+            let outside = text_outside_codespans(document);
+            assert!(!outside.contains('<'), "{outside}");
+            assert!(!outside.contains("]("), "{outside}");
+            assert!(!outside.contains('|'), "{outside}");
+        }
+        assert!(markdown.contains(
+            "curl ' | [link](http://evil.example) <script>alert(1)</script> second-line"
+        ));
+        assert!(!markdown.contains("\nsecond-line"));
+        let hook_line = markdown
+            .lines()
+            .find(|line| line.contains("second-line"))
+            .expect("hook line");
+        assert_eq!(hook_line.matches('`').count(), 8, "{hook_line}");
+        let json = render(&analysis, ReportKind::Json, GOLDEN_TIMESTAMP).unwrap();
+        assert!(json.contains("second-line"));
+        assert!(json.contains("<script>"));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn text_outside_codespans(markdown: &str) -> String {
+        let mut outside = String::new();
+        let mut in_span = false;
+        for ch in markdown.chars() {
+            if ch == '`' {
+                in_span = !in_span;
+                continue;
+            }
+            if !in_span {
+                outside.push(ch);
+            }
+        }
+        outside
     }
 }
