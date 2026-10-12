@@ -35,6 +35,14 @@
   ],
   "violations": [
     {
+      "rule": "advisory_coverage",
+      "package_name": "",
+      "package_version": "",
+      "configured_action": "warn",
+      "effective_action": "warn",
+      "message": "1 Pakete nicht gegen OSV geprüft (offline, kein/stale Cache)."
+    },
+    {
       "rule": "install_scripts",
       "package_name": "mini-app",
       "package_version": "1.0.0",

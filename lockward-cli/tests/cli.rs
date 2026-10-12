@@ -35,7 +35,11 @@ fn offline_corpus_exits_with_warning() {
         .assert()
         .code(1)
         .stdout(predicate::str::contains("Warnung"))
-        .stdout(predicate::str::contains("install_scripts"));
+        .stdout(predicate::str::contains("install_scripts"))
+        .stdout(predicate::str::contains("advisory_coverage"))
+        .stdout(predicate::str::contains(
+            "Pakete nicht gegen OSV geprüft (offline, kein/stale Cache).",
+        ));
 }
 
 #[test]

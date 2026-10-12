@@ -222,6 +222,9 @@ impl<T: HttpTransport> OsvClient<T> {
         let mut cache_hits = 0;
 
         for (index, package) in packages.iter().enumerate() {
+            // `FileCache::get` returns `None` for a missing or stale entry
+            // (`fetched_at` absent or older than the TTL), so those packages
+            // stay pending and are queried again when the client is online.
             if let Some(cache) = &self.cache
                 && let Some(advisories) = cache.get(&package.name, &package.version)?
             {
@@ -661,6 +664,26 @@ mod tests {
         assert_eq!(second.cache_misses, 0);
         assert_eq!(second.packages, first.packages);
         assert_eq!(transport.posts.load(Ordering::SeqCst), 1);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn stale_cache_entry_is_refetched_online() {
+        let dir = std::env::temp_dir().join(format!("lockward-osv-stale-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let cache = FileCache::new(&dir);
+        cache.put_at("lodash", "4.17.20", &[], 1).unwrap();
+        let transport = Scripted {
+            posts: AtomicUsize::new(0),
+            gets: AtomicUsize::new(0),
+        };
+        let report = OsvClient::new(&transport)
+            .with_cache(cache)
+            .query(std::slice::from_ref(&sample()[0]))
+            .unwrap();
+        assert_eq!(report.cache_hits, 0);
+        assert_eq!(transport.posts.load(Ordering::SeqCst), 1);
+        assert_eq!(report.packages[0].advisories[0].id, "GHSA-35jh-r3h4-6jhm");
         fs::remove_dir_all(&dir).unwrap();
     }
 

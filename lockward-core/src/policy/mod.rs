@@ -59,7 +59,7 @@ pub struct Policy {
     pub version: u32,
     /// Warn-first or enforce.
     pub mode: Mode,
-    /// The five default rules.
+    /// The default rules.
     pub rules: PolicyRules,
 }
 
@@ -77,6 +77,15 @@ pub struct PolicyRules {
     pub known_vulnerable: VulnerableRule,
     /// Secret-path heuristic.
     pub secret_path_access: ActionRule,
+    /// Offline scans with cache misses are not treated as a clean vulnerability check.
+    #[serde(default = "default_advisory_coverage")]
+    pub advisory_coverage: ActionRule,
+}
+
+fn default_advisory_coverage() -> ActionRule {
+    ActionRule {
+        action: Action::Warn,
+    }
 }
 
 /// Allowlist rule.
@@ -239,6 +248,7 @@ pub fn decide(policy: &Policy, input: Evaluation<'_>) -> Decision {
         &mut notes,
     );
     consider_vulnerabilities(policy, input.advisories, &mut violations);
+    consider_advisory_coverage(policy, input.advisories, &mut violations);
     consider_secrets(policy, input.heuristics, &mut violations);
     for violation in &mut violations {
         violation.effective_action = effective(policy.mode, violation.configured_action);
@@ -384,6 +394,30 @@ fn consider_vulnerabilities(
                 ),
             });
         }
+    }
+}
+
+fn consider_advisory_coverage(
+    policy: &Policy,
+    advisories: &AdvisoryReport,
+    violations: &mut Vec<Violation>,
+) {
+    let rule = &policy.rules.advisory_coverage;
+    if rule.action == Action::Allow {
+        return;
+    }
+    if advisories.offline && advisories.cache_misses > 0 {
+        violations.push(Violation {
+            rule: "advisory_coverage",
+            package_name: String::new(),
+            package_version: String::new(),
+            configured_action: rule.action,
+            effective_action: rule.action,
+            message: format!(
+                "{} Pakete nicht gegen OSV geprüft (offline, kein/stale Cache).",
+                advisories.cache_misses
+            ),
+        });
     }
 }
 
@@ -542,7 +576,59 @@ mod tests {
         assert_eq!(policy.rules.install_scripts.action, Action::Warn);
         assert_eq!(policy.rules.no_outbound_build.action, Action::Fail);
         assert_eq!(policy.rules.known_vulnerable.min_severity, Severity::High);
+        assert_eq!(policy.rules.advisory_coverage.action, Action::Warn);
         assert!(policy.rules.install_scripts.allow.is_empty());
+    }
+
+    #[test]
+    fn custom_policy_without_advisory_coverage_still_loads() {
+        let policy = parse_policy_str(
+            r#"
+            version: 1
+            mode: enforce
+            rules:
+              install_scripts: { action: allow }
+              no_outbound_build: { action: allow }
+              new_dependencies: { action: allow }
+              known_vulnerable: { action: allow, min_severity: high }
+              secret_path_access: { action: allow }
+            "#,
+            "legacy.yaml",
+        )
+        .unwrap();
+        assert_eq!(policy.rules.advisory_coverage.action, Action::Warn);
+    }
+
+    #[test]
+    fn offline_cache_miss_is_an_advisory_coverage_violation() {
+        let policy = Policy::default_policy().unwrap();
+        let advisories = AdvisoryReport {
+            packages: Vec::new(),
+            cache_hits: 0,
+            cache_misses: 2,
+            offline: true,
+        };
+        let decision = decide(
+            &policy,
+            Evaluation {
+                graph: &graph(),
+                hooks: &[],
+                heuristics: &[],
+                advisories: &advisories,
+                baseline: None,
+            },
+        );
+        assert!(decision.exit_code >= 1);
+        let coverage = decision
+            .violations
+            .iter()
+            .find(|item| item.rule == "advisory_coverage")
+            .expect("coverage violation");
+        assert_eq!(
+            coverage.message,
+            "2 Pakete nicht gegen OSV geprüft (offline, kein/stale Cache)."
+        );
+        assert!(decision.notes.iter().all(|note| note != &coverage.message));
     }
 
     #[test]
