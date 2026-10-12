@@ -1,59 +1,92 @@
 # Lockward
 
-Supply-Chain-Firewall und Backdoor-Risiko-Scanner für npm.
+> Static supply-chain & backdoor-risk scanner for npm. Lockward flags risky install-hooks, known OSV advisories, and backdoor-like patterns in your dependencies — right in CI, **without running a single line of package code**.
 
-Lockward liest ein Repository, bewertet Lockfile und Install-Hooks und setzt ein CI-Gate. Die Analyse ist rein statisch und führt keinen Paketcode aus.
+[![CI](https://github.com/YaDe1804/lockward/actions/workflows/ci.yml/badge.svg)](https://github.com/YaDe1804/lockward/actions/workflows/ci.yml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
+[![Mode 1: no code execution](https://img.shields.io/badge/Mode%201-no%20code%20execution-success.svg)](#how-it-works)
 
-## Layout
+Lockward is a **developer-first supply-chain firewall** for npm projects. It reads your lockfile and `package.json` files, scores the risk, explains *why* something is risky in plain language, and gates your CI — so compromised dependencies and malicious `postinstall` scripts don't reach production. **Mode 1 is fully static: package code is never executed.**
 
-| Pfad | Rolle |
-| --- | --- |
-| `lockward-core` | Bibliothek: ingest, resolve, advisories, hooks, heuristics, score, policy, report |
-| `lockward-cli` | Binary `lockward` |
-| `.github/workflows` | CI und signierter Release |
-| `docs/adr` | Architekturentscheidungen |
+Built for teams that ship with lots of dependencies but have no dedicated AppSec team — and for anyone who needs an auditable supply-chain check for **EU CRA / NIS2**.
 
-Datenfluss: `Repo/Lockfile → ingest → resolve → (advisories | hooks | heuristics) → score → policy → report/CI-Gate`.
+## Highlights
 
-## Voraussetzungen
+- **Install-hook scanner** — flags `preinstall` / `install` / `postinstall` (and `hasInstallScript`) without executing them.
+- **Explainable heuristics** — obfuscation, large base64 blobs, network-in-build, `curl | sh`, shell-outs, secret-path access — every hit comes with a plain-language reason.
+- **Known-vulnerability matching** — queries the **OSV** database with a local cache, and a *no-silent-gaps* rule: an offline scan without advisory coverage **warns** instead of pretending everything is clean.
+- **Policy gate** — warn-first by default; YAML policies decide what blocks a build.
+- **SBOM** — **CycloneDX 1.6** output, schema-validated in CI.
+- **CI-native** — PR comment + step summary via a GitHub Action.
+- **Safe by design** — `#![forbid(unsafe_code)]`, path-contained reads, bounded inputs, no package-code execution.
 
-- Rust stable (Edition 2024, `rustfmt`, `clippy`)
-- optional: `cargo-nextest`, `cargo-audit`
+## Quick start
 
-## Bauen und scannen
-
-```powershell
+### Build
+```bash
 cargo build --release -p lockward-cli
-cargo run -p lockward-cli -- --help
-cargo run -p lockward-cli -- scan . --offline
-cargo run -p lockward-cli -- scan . --format json --output report.json
-cargo run -p lockward-cli -- scan . --format all --output .\out
-cargo run -p lockward-cli -- baseline . -o baseline.txt
+# binary: target/release/lockward
 ```
 
-Exit-Codes: `0` ohne Verstoß, `1` Warnung oder Review, `2` Fail (nur im Modus `enforce`) oder Laufzeitfehler. Der Default-Modus ist `warn`.
+### Scan
+```bash
+lockward scan .                                   # human-readable summary
+lockward scan . --format json --output report.json
+lockward scan . --format all --output ./out       # comment.md, summary.md, report.json, bom.cdx.json
+```
+Exit codes: `0` clean · `1` warnings/review · `2` fail (enforce mode) or runtime error. Default mode is `warn`.
 
-## Grenzen
+### In CI (GitHub Actions)
+```yaml
+- uses: YaDe1804/lockward@v0.1.0   # available with the v0.1.0 release
+  with:
+    path: .
+    mode: warn        # or "enforce"
+    comment: "true"   # post findings as a PR comment
+```
+> Until the Marketplace release, the composite action lives at `.github/actions/lockward`.
 
-Untrusted Input ist begrenzt: Lockfile höchstens 32 MiB und 100 000 Pakete, `package.json` höchstens 1 MiB (darüber Warnung und Skip), höchstens 2048 OSV-Detailabfragen pro Scan. Ein Überschreiten ist ein Fehler oder eine Warnung, kein stilles Weiterlesen.
+### What a finding looks like
+On a pull request, Lockward posts a comment and fails the check:
 
-## Qualitätstor
+![Lockward PR comment](docs/pr-comment.png)
 
-```powershell
-cargo fmt --all
-cargo clippy --all-targets -- -D warnings
-cargo nextest run
-cargo audit
+## How it works
+
+```
+Repo / lockfile → ingest → resolve → (advisories ∥ hooks ∥ heuristics) → score → policy → report / CI gate
 ```
 
-## Lizenz
+Static parsing only. Lockward reads `package-lock.json` (v2/v3) and the `package.json` of locked packages, builds the dependency graph, matches OSV advisories, runs the hook/heuristic rules, scores each package, and applies your policy. It never downloads or runs package tarballs or scripts.
 
-Lockward ist **dual-lizenziert**:
+## Compliance: CRA & NIS2
 
-- **Open Source:** GNU AGPL-3.0-only (siehe `LICENSE`). Frei nutzbar, inkl.
-  der Copyleft-Pflichten bei Weitergabe oder Netzdienst.
-- **Kommerzielle Lizenz:** für Nutzung ohne AGPL-Pflichten (geschlossene
-  Produkte, Hosted Service, AGPL-freie Umgebungen) — siehe
-  `COMMERCIAL-LICENSE.md`.
+The EU **Cyber Resilience Act (CRA)** requires a machine-readable SBOM and formalized vulnerability management; **NIS2** requires assessing and securing critical suppliers — including the software supply chain. Lockward produces a **CycloneDX 1.6 SBOM** and an auditable, policy-gated supply-chain check that supports those obligations.
 
-Rechteinhaber ist die Yayvan UG (haftungsbeschränkt). Beiträge werden unter den Bedingungen in `CONTRIBUTING.md` / `CLA.md` angenommen, damit das Dual-Licensing möglich bleibt.
+## Configuration
+
+```bash
+lockward scan . --policy my-policy.yaml --mode enforce --baseline baseline.txt
+lockward baseline . -o baseline.txt          # snapshot current direct dependencies
+```
+Default rules (warn-first): install-scripts allowlist, no outbound during build, new-dependency review, known-vulnerable (≥ high) → fail, secret-path access → fail, advisory-coverage → warn.
+
+## Limits (hardened against untrusted input)
+
+Lockfile ≤ 32 MiB / 100,000 packages, `package.json` ≤ 1 MiB (otherwise warn + skip), ≤ 2048 OSV detail queries per scan — exceeding a limit is an error or warning, never silent truncation. Lockfile keys with `..`, a drive prefix, or a symlink leaving the project are skipped.
+
+## Status
+
+**Phase 1 (MVP):** npm lockfiles, static analysis (Mode 1), GitHub Action, CycloneDX SBOM.
+**Roadmap:** pip/cargo ecosystems, behavior sandbox (Mode 2), provenance/signing, team dashboard. Reports are currently in German (DACH-first); English localization is planned.
+
+## License
+
+Lockward is **dual-licensed**:
+
+- **Open source:** GNU AGPL-3.0-only (`LICENSE`). Free to use, with copyleft obligations on distribution or network use.
+- **Commercial license:** for use without AGPL obligations (closed products, hosted services, AGPL-restricted environments) — see `COMMERCIAL-LICENSE.md`.
+
+Rights holder: **Yayvan UG (haftungsbeschränkt)**. Contributions are accepted under `CONTRIBUTING.md` / `CLA.md` so dual-licensing stays possible.
+
+Build, layout, and the local quality gate: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
