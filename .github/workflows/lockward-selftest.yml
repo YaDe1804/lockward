@@ -1,0 +1,16 @@
+name: lockward-selftest
+on: pull_request
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: YaDe1804/lockward@v0.1.1
+        with:
+          path: lockward-core/tests/fixtures/ingest/v2-basic.json
+          offline: "true"
+          mode: warn
+          comment: "true"
