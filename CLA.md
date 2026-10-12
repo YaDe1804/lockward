@@ -1,15 +1,15 @@
 # Contributor License Agreement (Individual) — Entwurf, rechtlich prüfen
 
 Mit dem Einreichen eines Beitrags ("Contribution") zu Lockward stimmst du,
-der/die Beitragende, Folgendem gegenüber **Yayvan UG (haftungsbeschränkt)** zu:
+der/die Beitragende, Folgendem gegenüber **Deniz Yayvan** zu:
 
-1. **Urheberrechtslizenz.** Du gewährst Yayvan UG (haftungsbeschränkt) ein weltweites,
+1. **Urheberrechtslizenz.** Du gewährst Deniz Yayvan ein weltweites,
    zeitlich unbegrenztes, unwiderrufliches, nicht-exklusives, gebührenfreies
    Recht, deinen Beitrag zu nutzen, zu vervielfältigen, zu bearbeiten,
    öffentlich zugänglich zu machen, zu unterlizenzieren und **unter
    beliebigen Lizenzbedingungen (einschließlich AGPL-3.0 und kommerzieller
    Lizenzen) zu lizenzieren und weiterzulizenzieren.**
-2. **Patentlizenz.** Du gewährst Yayvan UG (haftungsbeschränkt) und den Nutzern eine
+2. **Patentlizenz.** Du gewährst Deniz Yayvan und den Nutzern eine
    entsprechende, gebührenfreie Patentlizenz für deinen Beitrag.
 3. **Zusicherung.** Du bestätigst, dass du berechtigt bist, diese Rechte zu
    gewähren, und dass dein Beitrag dein eigenes Werk ist (oder du die nötigen

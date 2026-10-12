@@ -1,6 +1,6 @@
 name: "Lockward Supply-Chain Scan"
 description: "Static supply-chain & backdoor-risk scanner for npm — flags install-hooks, risky deps and OSV advisories in CI. No package code executed."
-author: "Yayvan UG (haftungsbeschränkt)"
+author: "Deniz Yayvan"
 branding:
   icon: shield
   color: blue

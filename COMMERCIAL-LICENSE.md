@@ -16,12 +16,13 @@ If the AGPL obligations do not fit your use — for example you want to:
 - offer a **hosted service** based on Lockward without publishing your source, or
 - your organization **cannot use AGPL-licensed** software —
 
-a commercial license is available from **Yayvan UG (haftungsbeschränkt)**. It grants the
+a commercial license is available from **Deniz Yayvan (YaDe Labs)**. It grants the
 right to use Lockward **without** the AGPL copyleft obligations, under
 separately agreed terms.
 
 **Contact:** wellerman101@gmail.com — subject "Lockward commercial license".
 
 ---
-Copyright © 2026 Yayvan UG (haftungsbeschränkt). "Lockward" is a trademark of
-Yayvan UG (haftungsbeschränkt); the open-source license does not grant trademark rights.
+Copyright © 2026 Deniz Yayvan.
+"Lockward" is the project name used by Deniz Yayvan (YaDe Labs). The open-source
+license grants no rights to the project name, logo, or other branding.

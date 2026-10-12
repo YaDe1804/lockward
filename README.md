@@ -104,6 +104,6 @@ Lockward is **dual-licensed**:
 - **Open source:** GNU AGPL-3.0-only (`LICENSE`). Free to use, with copyleft obligations on distribution or network use.
 - **Commercial license:** for use without AGPL obligations (closed products, hosted services, AGPL-restricted environments) — see `COMMERCIAL-LICENSE.md`.
 
-Rights holder: **Yayvan UG (haftungsbeschränkt)**. Contributions are accepted under `CONTRIBUTING.md` / `CLA.md` so dual-licensing stays possible.
+Rights holder: **Deniz Yayvan** (YaDe Labs), independent developer / Freiberufler. Contributions are accepted under `CONTRIBUTING.md` / `CLA.md` so dual-licensing stays possible.
 
 Build, layout, and the local quality gate: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
