@@ -19,7 +19,7 @@ jobs:
           components: rustfmt, clippy
 
       - uses: taiki-e/install-action@f360235162158ca4526b07999d99c38ade05a414 # cargo-nextest
-      - uses: taiki-e/install-action@977cdbe2e748fc9d5798e3098868c4c4463bf31b # cargo-audit
+      - uses: taiki-e/install-action@f360235162158ca4526b07999d99c38ade05a414 # cargo-audit
 
       - name: Format
         run: cargo fmt --all -- --check
