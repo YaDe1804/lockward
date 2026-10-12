@@ -1,0 +1,18 @@
+version: 1
+mode: warn
+rules:
+  install_scripts:
+    action: warn
+    allow: []
+  no_outbound_build:
+    action: fail
+    allow_domains: []
+  new_dependencies:
+    action: review
+  known_vulnerable:
+    action: fail
+    min_severity: high
+  secret_path_access:
+    action: fail
+  advisory_coverage:
+    action: allow
