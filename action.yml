@@ -29,7 +29,10 @@ inputs:
     default: ""
   version:
     description: "Lockward release tag to download"
-    default: "v0.1.0"
+    default: "v0.1.1"
+  verify-signature:
+    description: "Verify the cosign signature of SHA256SUMS (true/false)"
+    default: "true"
 
 outputs:
   exit-code:
@@ -39,6 +42,12 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Install cosign
+      if: ${{ inputs.verify-signature == 'true' }}
+      uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      with:
+        cosign-release: "v3.1.3"
+
     - id: scan
       shell: bash
       env:
@@ -50,6 +59,7 @@ runs:
         LW_COMMENT: ${{ inputs.comment }}
         LW_SCANNED_AT: ${{ inputs.scanned-at }}
         LW_VERSION: ${{ inputs.version }}
+        LW_VERIFY: ${{ inputs.verify-signature }}
         LW_REPO: ${{ github.action_repository }}
         LW_CALLER: ${{ github.repository }}
         LW_PR: ${{ github.event.pull_request.number }}
@@ -63,7 +73,14 @@ runs:
           *) echo "::error::unsupported runner OS ${RUNNER_OS}"; exit 1 ;;
         esac
         tmp="$(mktemp -d)"
-        gh release download "$LW_VERSION" -R "$repo" -p "$asset" -p "SHA256SUMS" -D "$tmp"
+        gh release download "$LW_VERSION" -R "$repo" -p "$asset" -p "SHA256SUMS" -p "SHA256SUMS.cosign.bundle" -D "$tmp"
+        if [ "${LW_VERIFY:-true}" = "true" ]; then
+          cosign verify-blob \
+            --bundle "$tmp/SHA256SUMS.cosign.bundle" \
+            --certificate-identity-regexp "^https://github.com/YaDe1804/lockward/\.github/workflows/release\.yml@refs/tags/" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$tmp/SHA256SUMS"
+        fi
         # Release checksums are `sha256sum` lines: "<hex>  ./<asset>".
         pushd "$tmp" >/dev/null
         expected="$(awk -v asset="$asset" '
