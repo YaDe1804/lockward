@@ -12,14 +12,14 @@ jobs:
     name: fmt, clippy, test, audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
         with:
           components: rustfmt, clippy
 
-      - uses: taiki-e/install-action@cargo-nextest
-      - uses: taiki-e/install-action@cargo-audit
+      - uses: taiki-e/install-action@f360235162158ca4526b07999d99c38ade05a414 # cargo-nextest
+      - uses: taiki-e/install-action@977cdbe2e748fc9d5798e3098868c4c4463bf31b # cargo-audit
 
       - name: Format
         run: cargo fmt --all -- --check
