@@ -80,6 +80,23 @@ Lockfile ≤ 32 MiB / 100,000 packages, `package.json` ≤ 1 MiB (otherwise warn
 **Phase 1 (MVP):** npm lockfiles, static analysis (Mode 1), GitHub Action, CycloneDX SBOM.
 **Roadmap:** pip/cargo ecosystems, behavior sandbox (Mode 2), provenance/signing, team dashboard. Reports are currently in German (DACH-first); English localization is planned.
 
+## Verifying a release
+
+Each release ships a `SHA256SUMS` file and a keyless **Sigstore** signature
+(`SHA256SUMS.cosign.bundle`), produced in CI via GitHub OIDC — no private keys involved.
+
+```bash
+# 1) Checksums prüfen
+sha256sum -c SHA256SUMS            # bzw. shasum -a 256 -c SHA256SUMS (macOS)
+
+# 2) Signatur der Checksums-Datei prüfen (cosign erforderlich)
+cosign verify-blob \
+  --bundle SHA256SUMS.cosign.bundle \
+  --certificate-identity-regexp "^https://github.com/YaDe1804/lockward/\.github/workflows/release\.yml@refs/tags/" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  SHA256SUMS
+```
+
 ## License
 
 Lockward is **dual-licensed**:
