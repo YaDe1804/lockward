@@ -73,7 +73,14 @@ pub fn evaluate(hooks: &[HookFinding]) -> Vec<HeuristicFinding> {
             continue;
         }
         for rule in COMPILED.iter() {
-            if let Some(mat) = rule.pattern.find(&hook.raw) {
+            let mat = if rule.info.id == "LW-H002" {
+                rule.pattern
+                    .find_iter(&hook.raw)
+                    .find(|candidate| suspicious_base64(candidate.as_str()))
+            } else {
+                rule.pattern.find(&hook.raw)
+            };
+            if let Some(mat) = mat {
                 let evidence = clip_evidence(&hook.raw[mat.start()..]);
                 let explanation = format!(
                     "Paket {}@{} Hook `{}`: {}. Beleg: `{evidence}`.",
@@ -112,6 +119,21 @@ fn clip_evidence(raw: &str) -> String {
     kept
 }
 
+/// Length alone is not enough. Pure hex and single-alphabet runs are common
+/// in minified code and must not match. A hit needs a mixed alphabet or a
+/// base64 symbol, and it must not be hexadecimal.
+fn suspicious_base64(token: &str) -> bool {
+    let body = token.trim_end_matches('=');
+    if body.chars().count() < 80 || body.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return false;
+    }
+    let has_upper = body.chars().any(|ch| ch.is_ascii_uppercase());
+    let has_lower = body.chars().any(|ch| ch.is_ascii_lowercase());
+    let has_digit = body.chars().any(|ch| ch.is_ascii_digit());
+    let has_symbol = body.chars().any(|ch| ch == '+' || ch == '/');
+    has_symbol || (has_upper && has_lower && has_digit)
+}
+
 fn compile(pattern: &str) -> Regex {
     Regex::new(pattern).unwrap_or_else(|err| {
         panic!("heuristic pattern failed to compile: {pattern}: {err}");
@@ -121,15 +143,15 @@ fn compile(pattern: &str) -> Regex {
 static RULES: [RuleInfo; 6] = [
     RuleInfo {
         id: "LW-H001",
-        description: "Obfuskation im Hook (eval, Function, fromCharCode, atob, Hex-Escapes)",
+        description: "Obfuskation im Hook (eval, new Function, fromCharCode, atob, Hex-Escapes)",
         weight: 25,
         example: r#"eval(Buffer.from("aGVsbG8=", "base64").toString())"#,
     },
     RuleInfo {
         id: "LW-H002",
-        description: "Großer Base64-Block (mindestens 80 Zeichen)",
+        description: "Großer Base64-Block (mindestens 80 Zeichen, gemischter Zeichensatz)",
         weight: 20,
-        example: "const blob = \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\";",
+        example: "const blob = \"bG9ja3dhcmQgaGV1cmlzdGljIGZpeHR1cmUgcGF5bG9hZCB0aGF0IGlzIGxvbmcgZW5vdWdoIGZvciB0aGUgYmFzZTY0IHJ1bGU=\";",
     },
     RuleInfo {
         id: "LW-H003",
@@ -163,7 +185,7 @@ static COMPILED: LazyLock<Vec<CompiledRule>> = LazyLock::new(|| {
             info: RULES[0],
             reason: "der Hook enthält obfuskierten Code",
             pattern: compile(
-                r#"(?i)\beval\s*\(|\bFunction\s*\(|fromCharCode|\batob\s*\(|\bunescape\s*\(|(?:\\x[0-9a-fA-F]{2}){4,}"#,
+                r#"(?i)\beval\s*\(|\bnew\s+Function\s*\(|fromCharCode|\batob\s*\(|\bunescape\s*\(|(?:\\x[0-9a-fA-F]{2}){4,}"#,
             ),
         },
         CompiledRule {
@@ -265,10 +287,26 @@ mod tests {
     #[test]
     fn base64_rule_ignores_short_tokens() {
         assert!(ids("const token = \"aGVsbG8=\";").is_empty());
+        assert!(!ids(&format!("const blob = \"{}\";", "A".repeat(80))).contains(&"LW-H002"));
+        assert!(
+            !ids(&format!(
+                "const hex = \"{}\";",
+                "0123456789abcdef".repeat(8)
+            ))
+            .contains(&"LW-H002")
+        );
         assert_eq!(
-            ids(&format!("const blob = \"{}\";", "A".repeat(80))),
+            ids(
+                "const blob = \"bG9ja3dhcmQgaGV1cmlzdGljIGZpeHR1cmUgcGF5bG9hZCB0aGF0IGlzIGxvbmcgZW5vdWdoIGZvciB0aGUgYmFzZTY0IHJ1bGU=\";"
+            ),
             ["LW-H002"]
         );
+    }
+
+    #[test]
+    fn function_constructor_requires_new() {
+        assert!(!ids("const name = Function(\"return 1\")").contains(&"LW-H001"));
+        assert!(ids("const evil = new Function(\"return 1\")").contains(&"LW-H001"));
     }
 
     #[test]

