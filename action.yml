@@ -1,0 +1,117 @@
+name: "Lockward Supply-Chain Scan"
+description: "Static supply-chain & backdoor-risk scanner for npm — flags install-hooks, risky deps and OSV advisories in CI. No package code executed."
+author: "Yayvan UG (haftungsbeschränkt)"
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  path:
+    description: "Project dir or package-lock.json"
+    default: "."
+  mode:
+    description: "warn or enforce"
+    default: "warn"
+  policy:
+    description: "Optional YAML policy path"
+    default: ""
+  offline:
+    description: "Use only the advisory cache (true/false)"
+    default: "false"
+  comment:
+    description: "Post findings as a PR comment (true/false)"
+    default: "true"
+  token:
+    description: "Token for the PR comment"
+    default: "${{ github.token }}"
+  scanned-at:
+    description: "Optional RFC3339 timestamp for reproducible reports"
+    default: ""
+  version:
+    description: "Lockward release tag to download"
+    default: "v0.1.0"
+
+outputs:
+  exit-code:
+    description: "Gate exit code (0 ok, 1 warn, 2 fail)"
+    value: ${{ steps.scan.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - id: scan
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        LW_PATH: ${{ inputs.path }}
+        LW_MODE: ${{ inputs.mode }}
+        LW_POLICY: ${{ inputs.policy }}
+        LW_OFFLINE: ${{ inputs.offline }}
+        LW_COMMENT: ${{ inputs.comment }}
+        LW_SCANNED_AT: ${{ inputs.scanned-at }}
+        LW_VERSION: ${{ inputs.version }}
+        LW_REPO: ${{ github.action_repository }}
+        LW_CALLER: ${{ github.repository }}
+        LW_PR: ${{ github.event.pull_request.number }}
+      run: |
+        set -euo pipefail
+        repo="${LW_REPO:-YaDe1804/lockward}"
+        case "${RUNNER_OS}" in
+          Linux)   asset="lockward-x86_64-unknown-linux-gnu.tar.gz"; bin="lockward" ;;
+          macOS)   asset="lockward-aarch64-apple-darwin.tar.gz";     bin="lockward" ;;
+          Windows) asset="lockward-x86_64-pc-windows-msvc.zip";      bin="lockward.exe" ;;
+          *) echo "::error::unsupported runner OS ${RUNNER_OS}"; exit 1 ;;
+        esac
+        tmp="$(mktemp -d)"
+        gh release download "$LW_VERSION" -R "$repo" -p "$asset" -p "SHA256SUMS" -D "$tmp"
+        # Release checksums are `sha256sum` lines: "<hex>  ./<asset>".
+        pushd "$tmp" >/dev/null
+        expected="$(awk -v asset="$asset" '
+          {
+            name = $2
+            sub(/^\.\//, "", name)
+            if (name == asset) print $1
+          }
+        ' SHA256SUMS | tail -n1)"
+        if [ -z "$expected" ]; then
+          echo "::error::SHA256SUMS has no entry for ${asset}"
+          exit 1
+        fi
+        if command -v sha256sum >/dev/null 2>&1; then
+          actual="$(sha256sum "$asset" | awk '{print $1}')"
+        elif command -v shasum >/dev/null 2>&1; then
+          actual="$(shasum -a 256 "$asset" | awk '{print $1}')"
+        else
+          actual="$(powershell.exe -NoProfile -Command "(Get-FileHash -Algorithm SHA256 -LiteralPath '$asset').Hash.ToLower()")"
+        fi
+        actual="$(printf '%s' "$actual" | tr '[:upper:]' '[:lower:]')"
+        expected="$(printf '%s' "$expected" | tr '[:upper:]' '[:lower:]')"
+        if [ "$actual" != "$expected" ]; then
+          echo "::error::checksum mismatch for ${asset}"
+          exit 1
+        fi
+        case "$asset" in
+          *.tar.gz) tar -xzf "$asset" ;;
+          *.zip)    unzip -o "$asset" >/dev/null ;;
+        esac
+        popd >/dev/null
+        LOCKWARD="$tmp/$bin"
+        chmod +x "$LOCKWARD" 2>/dev/null || true
+        out="${RUNNER_TEMP:-/tmp}/lockward-out"
+        mkdir -p "$out"
+        args=(scan "$LW_PATH" --format all --output "$out" --mode "$LW_MODE")
+        [ -n "$LW_POLICY" ] && args+=(--policy "$LW_POLICY")
+        [ "$LW_OFFLINE" = "true" ] && args+=(--offline)
+        [ -n "$LW_SCANNED_AT" ] && args+=(--scanned-at "$LW_SCANNED_AT")
+        set +e
+        "$LOCKWARD" "${args[@]}"
+        code=$?
+        set -e
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        if [ -f "$out/summary.md" ]; then
+          cat "$out/summary.md" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+        fi
+        if [ "$LW_COMMENT" = "true" ] && [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ]; then
+          gh pr comment "$LW_PR" --body-file "$out/comment.md" -R "$LW_CALLER"
+        fi
+        exit "$code"
