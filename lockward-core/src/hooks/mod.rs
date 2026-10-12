@@ -17,6 +17,9 @@ pub const NPM_INSTALL_HOOKS: &[&str] = &["preinstall", "install", "postinstall"]
 /// Maximum number of characters kept from a hook body.
 pub const MAX_HOOK_CHARS: usize = 8_192;
 
+/// Largest `package.json` that will be read (1 MiB). Bigger manifests are skipped.
+pub const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
+
 /// Where a hook finding came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -173,6 +176,13 @@ fn read_manifest(path: &Path) -> std::result::Result<Option<Value>, String> {
         return Err(format!(
             "{}: skipped symlink; hook bodies are only read from regular files",
             path.display()
+        ));
+    }
+    if metadata.len() > MAX_MANIFEST_BYTES {
+        return Err(format!(
+            "{}: skipped, package.json is {} bytes; the limit is {MAX_MANIFEST_BYTES} bytes",
+            path.display(),
+            metadata.len()
         ));
     }
     let text = fs::read_to_string(path).map_err(|err| format!("{}: {err}", path.display()))?;
@@ -558,6 +568,40 @@ mod tests {
             report.warnings
         );
         fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn oversized_manifest_is_skipped_with_a_warning() {
+        let dir = std::env::temp_dir().join(format!("lockward-hooks-big-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("package-lock.json"),
+            r#"{
+              "name": "app",
+              "version": "1.0.0",
+              "lockfileVersion": 3,
+              "packages": { "": { "name": "app", "version": "1.0.0" } }
+            }"#,
+        )
+        .unwrap();
+        fs::write(dir.join("package.json"), "{}\n").unwrap();
+        let manifest = dir.join("package.json");
+        let file = fs::File::options().write(true).open(&manifest).unwrap();
+        file.set_len(MAX_MANIFEST_BYTES + 1).unwrap();
+        drop(file);
+        let lock = parse_lockfile(&dir.join("package-lock.json")).unwrap();
+        let report = detect_hooks(&lock, &dir).unwrap();
+        assert!(report.findings.is_empty());
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("skipped") && warning.contains("limit")),
+            "{:?}",
+            report.warnings
+        );
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     fn link_dir(target: &Path, link: &Path) -> io::Result<()> {

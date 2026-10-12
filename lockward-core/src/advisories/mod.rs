@@ -22,6 +22,12 @@ pub const OSV_BASE_URL: &str = "https://api.osv.dev";
 
 const BATCH_LIMIT: usize = 128;
 
+/// Most OSV vulnerability documents fetched in one scan.
+///
+/// The batch query may name more ids than this. The scan then stops with
+/// [`Error::Limit`](crate::Error::Limit) instead of downloading them.
+pub const MAX_VULN_DETAIL_GETS: usize = 2_048;
+
 /// Coarse severity used by the policy gate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -339,6 +345,14 @@ impl<T: HttpTransport> OsvClient<T> {
         let mut unique_ids = BTreeSet::new();
         for ids in ids_for.values() {
             unique_ids.extend(ids.iter().cloned());
+        }
+        if unique_ids.len() > MAX_VULN_DETAIL_GETS {
+            return Err(Error::Limit {
+                message: format!(
+                    "OSV returned {} vulnerability ids; the detail-request limit is {MAX_VULN_DETAIL_GETS}",
+                    unique_ids.len()
+                ),
+            });
         }
         let mut by_id = BTreeMap::new();
         for id in unique_ids {
@@ -685,6 +699,35 @@ mod tests {
         assert_eq!(transport.posts.load(Ordering::SeqCst), 1);
         assert_eq!(report.packages[0].advisories[0].id, "GHSA-35jh-r3h4-6jhm");
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn vuln_detail_gets_stop_at_the_limit() {
+        struct Flood {
+            gets: AtomicUsize,
+        }
+        impl HttpTransport for Flood {
+            fn post_json(&self, url: &str, _body: &Value) -> Result<Value> {
+                assert!(url.ends_with("/v1/querybatch"));
+                let vulns = (0..=MAX_VULN_DETAIL_GETS)
+                    .map(|index| json!({ "id": format!("GHSA-{index}") }))
+                    .collect::<Vec<_>>();
+                Ok(json!({ "results": [{ "vulns": vulns }] }))
+            }
+
+            fn get_json(&self, _url: &str) -> Result<Value> {
+                self.gets.fetch_add(1, Ordering::SeqCst);
+                Ok(json!({ "id": "unused" }))
+            }
+        }
+        let transport = Flood {
+            gets: AtomicUsize::new(0),
+        };
+        let err = OsvClient::new(&transport)
+            .query(std::slice::from_ref(&sample()[0]))
+            .unwrap_err();
+        assert!(matches!(err, Error::Limit { .. }), "{err}");
+        assert_eq!(transport.gets.load(Ordering::SeqCst), 0);
     }
 
     #[test]

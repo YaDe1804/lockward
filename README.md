@@ -33,6 +33,10 @@ cargo run -p lockward-cli -- baseline . -o baseline.txt
 
 Exit-Codes: `0` ohne Verstoß, `1` Warnung oder Review, `2` Fail (nur im Modus `enforce`) oder Laufzeitfehler. Der Default-Modus ist `warn`.
 
+## Grenzen
+
+Untrusted Input ist begrenzt: Lockfile höchstens 32 MiB und 100 000 Pakete, `package.json` höchstens 1 MiB (darüber Warnung und Skip), höchstens 2048 OSV-Detailabfragen pro Scan. Ein Überschreiten ist ein Fehler oder eine Warnung, kein stilles Weiterlesen.
+
 ## Qualitätstor
 
 ```powershell
