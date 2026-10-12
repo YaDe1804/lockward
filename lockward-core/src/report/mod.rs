@@ -255,12 +255,43 @@ fn component(package: &Package) -> Value {
         "scope": if package.dev { "optional" } else { "required" }
     });
     if let Some(license) = &package.license {
-        value["licenses"] = json!([{ "license": { "id": license } }]);
+        value["licenses"] = json!([cyclonedx_license(license)]);
     }
     if let Some((alg, content)) = package.integrity.as_deref().and_then(sri_hash) {
         value["hashes"] = json!([{ "alg": alg, "content": content }]);
     }
     value
+}
+
+/// Classify a lockfile license for CycloneDX 1.6.
+///
+/// A known SPDX identifier becomes `license.id`. An expression (`OR`, `AND`,
+/// `WITH`, or parentheses) that the SPDX grammar accepts becomes `expression`.
+/// Anything else is free text in `license.name`, so a random string never lands
+/// in `license.id`.
+fn cyclonedx_license(license: &str) -> Value {
+    let text = license.trim();
+    if spdx_expression_syntax(text) {
+        if spdx::Expression::parse(text).is_ok() {
+            return json!({ "expression": text });
+        }
+        return json!({ "license": { "name": text } });
+    }
+    if spdx::license_id(text).is_some() {
+        json!({ "license": { "id": text } })
+    } else {
+        json!({ "license": { "name": text } })
+    }
+}
+
+fn spdx_expression_syntax(text: &str) -> bool {
+    text.contains('(')
+        || text.contains(')')
+        || text.split_whitespace().any(|word| {
+            word.eq_ignore_ascii_case("OR")
+                || word.eq_ignore_ascii_case("AND")
+                || word.eq_ignore_ascii_case("WITH")
+        })
 }
 
 fn purl(name: &str, version: &str) -> String {
@@ -546,6 +577,26 @@ mod tests {
         assert!(json.contains("second-line"));
         assert!(json.contains("<script>"));
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn cyclonedx_license_uses_id_expression_or_name() {
+        assert_eq!(
+            cyclonedx_license("MIT"),
+            json!({ "license": { "id": "MIT" } })
+        );
+        assert_eq!(
+            cyclonedx_license("(MIT OR Apache-2.0)"),
+            json!({ "expression": "(MIT OR Apache-2.0)" })
+        );
+        assert_eq!(
+            cyclonedx_license("SEE LICENSE IN LICENSE"),
+            json!({ "license": { "name": "SEE LICENSE IN LICENSE" } })
+        );
+        assert_eq!(
+            cyclonedx_license("MIT OR NOPE"),
+            json!({ "license": { "name": "MIT OR NOPE" } })
+        );
     }
 
     fn text_outside_codespans(markdown: &str) -> String {
