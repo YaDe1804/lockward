@@ -65,8 +65,26 @@ pub struct Package {
     pub peer_dependencies: BTreeMap<String, String>,
 }
 
+/// Largest lockfile that will be read (32 MiB).
+pub const MAX_LOCKFILE_BYTES: u64 = 32 * 1024 * 1024;
+
+/// Largest `packages` map that will be normalized.
+pub const MAX_PACKAGES: usize = 100_000;
+
 /// Read and parse a `package-lock.json` from disk.
+///
+/// Files larger than [`MAX_LOCKFILE_BYTES`] are rejected before they are read.
 pub fn parse_lockfile(path: &Path) -> Result<Lockfile> {
+    let metadata = fs::metadata(path).map_err(|source| Error::io(path, source))?;
+    if metadata.len() > MAX_LOCKFILE_BYTES {
+        return Err(Error::Limit {
+            message: format!(
+                "lockfile {} is {} bytes; the limit is {MAX_LOCKFILE_BYTES} bytes",
+                path.display(),
+                metadata.len()
+            ),
+        });
+    }
     let text = fs::read_to_string(path).map_err(|source| Error::io(path, source))?;
     parse_lockfile_str(&text, &path.display().to_string())
 }
@@ -74,7 +92,16 @@ pub fn parse_lockfile(path: &Path) -> Result<Lockfile> {
 /// Parse lockfile JSON from memory.
 ///
 /// `origin` is used in error messages (a path or a fixture name).
+/// Strings longer than [`MAX_LOCKFILE_BYTES`] are rejected before parsing.
 pub fn parse_lockfile_str(text: &str, origin: &str) -> Result<Lockfile> {
+    if text.len() as u64 > MAX_LOCKFILE_BYTES {
+        return Err(Error::Limit {
+            message: format!(
+                "lockfile {origin} is {} bytes; the limit is {MAX_LOCKFILE_BYTES} bytes",
+                text.len()
+            ),
+        });
+    }
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let raw: RawLockfile = serde_json::from_str(text).map_err(|source| Error::Json {
         path: origin.to_owned(),
@@ -100,6 +127,14 @@ fn normalize(raw: RawLockfile, origin: &str) -> Result<Lockfile> {
             path: origin.to_owned(),
         });
     };
+    if packages.len() > MAX_PACKAGES {
+        return Err(Error::Limit {
+            message: format!(
+                "lockfile {origin} has {} packages; the limit is {MAX_PACKAGES}",
+                packages.len()
+            ),
+        });
+    }
 
     let lockfile_version = u32::try_from(version).map_err(|_| Error::UnsupportedLockfile {
         path: origin.to_owned(),
@@ -414,6 +449,37 @@ mod tests {
         let missing = parse_lockfile(&dir.join("nope.json")).unwrap_err();
         assert!(matches!(missing, Error::Io { .. }));
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn oversized_lockfile_is_rejected_before_parse() {
+        let dir = std::env::temp_dir().join(format!("lockward-ingest-big-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("package-lock.json");
+        let file = fs::File::create(&path).unwrap();
+        file.set_len(MAX_LOCKFILE_BYTES + 1).unwrap();
+        drop(file);
+        let err = parse_lockfile(&path).unwrap_err();
+        assert!(matches!(err, Error::Limit { .. }), "{err}");
+        assert!(err.to_string().contains("limit"));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn too_many_packages_is_an_error() {
+        let mut body = String::from(
+            r#"{"name":"app","version":"1.0.0","lockfileVersion":3,"packages":{"":{"name":"app","version":"1.0.0"}"#,
+        );
+        for index in 0..MAX_PACKAGES {
+            body.push_str(",\"node_modules/p");
+            body.push_str(&index.to_string());
+            body.push_str("\":{\"version\":\"1.0.0\"}");
+        }
+        body.push_str("}}");
+        let err = parse_lockfile_str(&body, "too-many.json").unwrap_err();
+        assert!(matches!(err, Error::Limit { .. }), "{err}");
+        assert!(err.to_string().contains("packages"));
     }
 
     #[test]

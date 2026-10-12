@@ -77,6 +77,13 @@ pub enum Error {
         /// Parser or validation detail.
         message: String,
     },
+
+    /// An untrusted input exceeded a fixed bound. The input was not processed further.
+    #[error("input limit exceeded: {message}")]
+    Limit {
+        /// Which bound was crossed.
+        message: String,
+    },
 }
 
 /// Library result alias.
