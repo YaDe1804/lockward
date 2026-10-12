@@ -101,19 +101,16 @@ jobs:
           find . -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
 
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: "v3.1.3"
 
       - name: Sign checksums
         run: |
           set -euo pipefail
           cosign sign-blob --yes \
-            --output-signature dist/SHA256SUMS.sig \
-            --output-certificate dist/SHA256SUMS.pem \
+            --bundle dist/SHA256SUMS.cosign.bundle \
             dist/SHA256SUMS
 
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
-          files: |
-            dist/*
-            dist/SHA256SUMS
-            dist/SHA256SUMS.sig
-            dist/SHA256SUMS.pem
+          files: dist/*
