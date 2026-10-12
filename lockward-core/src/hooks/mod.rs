@@ -265,6 +265,17 @@ fn structural_escape(package_path: &str) -> Option<&'static str> {
     if package_path.is_empty() {
         return None;
     }
+    // `Path` on Unix does not treat `\` or `C:` as special. Lockfile keys are
+    // untrusted text, so both separators and Windows drive prefixes count here.
+    if has_windows_drive_or_unc(package_path) {
+        return Some("absolute path");
+    }
+    if package_path
+        .split(['\\', '/'])
+        .any(|segment| segment == "..")
+    {
+        return Some("parent directory (`..`)");
+    }
     for component in Path::new(package_path).components() {
         match component {
             Component::ParentDir => return Some("parent directory (`..`)"),
@@ -273,6 +284,15 @@ fn structural_escape(package_path: &str) -> Option<&'static str> {
         }
     }
     None
+}
+
+fn has_windows_drive_or_unc(package_path: &str) -> bool {
+    let mut chars = package_path.chars();
+    let drive = matches!(
+        (chars.next(), chars.next()),
+        (Some(letter), Some(':')) if letter.is_ascii_alphabetic()
+    );
+    drive || package_path.starts_with(r"\\") || package_path.starts_with("//")
 }
 
 fn ancestor_leaves_root(path: &Path, canonical_root: &Path) -> bool {

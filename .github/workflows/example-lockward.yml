@@ -26,5 +26,6 @@ jobs:
           mode: warn
           offline: "true"
           comment: "false"
+          policy: examples/clean/policy.yaml
           lockward-bin: target/release/lockward
           scanned-at: "2026-10-12T00:00:00Z"

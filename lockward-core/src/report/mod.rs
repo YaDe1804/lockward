@@ -454,8 +454,13 @@ mod tests {
     fn normalize(text: &str, root: &Path) -> String {
         let display = root.display().to_string();
         let escaped = display.replace('\\', "\\\\");
+        // JSON writes one Windows separator as two backslashes. After the root
+        // is replaced, that pair must become a single slash or Linux (which
+        // never escapes `/`) cannot match a golden produced on Windows.
         text.replace(&escaped, "{root}")
             .replace(&display, "{root}")
+            .replace("{root}\\\\", "{root}\\")
+            .replace("{root}//", "{root}/")
             .replace('\\', "/")
             .replace("\r\n", "\n")
     }
