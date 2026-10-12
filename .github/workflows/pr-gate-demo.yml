@@ -1,0 +1,34 @@
+name: PR gate demo
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  demo:
+    if: >-
+      github.head_ref == 'test/pr-gate-demo' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/test/pr-gate-demo') ||
+      contains(github.event.pull_request.labels.*.name, 'pr-gate-demo')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+
+      - name: Build lockward
+        run: cargo build --release -p lockward-cli
+
+      - name: Scan the flagged fixture
+        uses: ./.github/actions/lockward
+        with:
+          path: examples/flagged
+          mode: warn
+          offline: "true"
+          comment: "true"
+          lockward-bin: target/release/lockward
+          scanned-at: "2026-10-12T00:00:00Z"
