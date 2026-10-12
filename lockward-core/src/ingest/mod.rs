@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Parser for npm `package-lock.json` versions 2 and 3.
 //!
 //! The legacy `dependencies` tree from lockfile v1/v2 is ignored. The

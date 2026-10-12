@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! OSV advisory client with a file cache and a mockable HTTP transport.
 //!
 //! Mode 1 only fetches advisory JSON. Package tarballs and exploit code are

@@ -16,10 +16,10 @@ AP1.8 braucht vier Ausgaben: PR-Kommentar, GitHub Step Summary, JSON und Cyclone
 
 ## Begründung
 
-Deterministische Nummern und Pfade machen Snapshot-Tests möglich. Deutsch in den beiden Markdown-Formaten trifft die DACH-Reports aus der Spezifikation, ohne den JSON-Vertrag zu übersetzen.
+Deterministische Nummern und Pfade machen Snapshot-Tests möglich. Deutsch in den beiden Markdown-Formaten hält die Reports für den DACH-Raum, ohne den JSON-Vertrag zu übersetzen.
 
 ## Alternativen
 
 - Zufällige UUID: bricht Golden-Files.
-- Offizielles CycloneDX-Schema als Crate zur Validierung: zusätzliche Abhängigkeit. Die Tests prüfen die Pflichtfelder; ein Schema-Check gegen die Spezifikation bleibt eine manuelle Ergänzung.
-- SPDX statt CycloneDX: die Spezifikation bevorzugt CycloneDX.
+- Offizielles CycloneDX-Schema als Crate zur Validierung: zusätzliche Abhängigkeit. Die Tests prüfen die Pflichtfelder; ein Schema-Check gegen das CycloneDX-Schema bleibt eine manuelle Ergänzung.
+- SPDX statt CycloneDX: das Ausgabeformat ist CycloneDX.

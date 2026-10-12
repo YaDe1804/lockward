@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Static supply-chain analysis for Lockward.
 //!
 //! Mode 1 never executes third-party package code. Callers pass already

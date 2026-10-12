@@ -5,9 +5,7 @@
 .idea/
 .vscode/
 *.log
+*.html
+*.docx
 
-# interne Unterlagen
-supply_chain_scanner_roadmap_*.html
-*_Spezifikation_*.docx
-Cursor-Arbeitsanweisung_*.md
-*SeQu*
+out/

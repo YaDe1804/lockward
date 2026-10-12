@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! End-to-end static scan. Package code is never executed.
 
 use crate::advisories::{AdvisoryCache, HttpTransport, OsvClient, package_queries};

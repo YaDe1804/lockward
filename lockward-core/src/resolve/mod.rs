@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Dependency graph built from an ingested npm lockfile.
 //!
 //! Resolution follows Node's `node_modules` walk: a dependency is looked up

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Content-addressed file cache for OSV package queries.
 //!
 //! Entries older than [`CACHE_TTL_SECS`] are stale. A stale hit is treated as

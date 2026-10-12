@@ -2,7 +2,7 @@
 
 ## Kontext
 
-AP1.4 muss `preinstall`, `install` und `postinstall` finden und Fundstelle plus Rohinhalt liefern. Die Skriptkörper stehen nicht im Lockfile, sondern in `package.json`. Mode 1 darf keinen Paketcode ausführen. `build.rs` und `setup.py` sind in der Spezifikation genannt, aber Phase 1 bleibt bei npm.
+AP1.4 muss `preinstall`, `install` und `postinstall` finden und Fundstelle plus Rohinhalt liefern. Die Skriptkörper stehen nicht im Lockfile, sondern in `package.json`. Mode 1 darf keinen Paketcode ausführen. `build.rs` und `setup.py` gehören zu anderen Ökosystemen; Phase 1 bleibt bei npm.
 
 ## Entscheidung
 
@@ -22,4 +22,4 @@ Der Lockfile-Pfad ist die Inventarliste. Ein Verzeichniswalk über ganz `node_mo
 
 - Hooks nur über `hasInstallScript`: verliert den Rohinhalt, den Heuristiken brauchen.
 - Jede `package.json` unter `node_modules` rekursiv: findet Pakete außerhalb des Lockfiles, liest aber mehr und folgt leichter Pfadtricks.
-- `prepare` mit aufnehmen: npm führt es bei `npm install` ebenfalls aus, steht aber nicht in der Arbeitsanweisung. Bewusst nicht im v1-Korpus, sonst entstehen False Positives gegen das DoD.
+- `prepare` mit aufnehmen: npm führt es bei `npm install` ebenfalls aus, gehört aber nicht zu den drei Install-Hooks. Bewusst nicht im v1-Korpus, sonst entstehen False Positives gegen das DoD.

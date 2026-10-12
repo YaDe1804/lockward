@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Versioned, rule-based heuristic engine over install-hook text.
 //!
 //! Rules are static. They classify strings already loaded by [`crate::hooks`].

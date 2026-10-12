@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! CVSS v3.0/v3.1 base score.
 //!
 //! The implementation follows the FIRST rounding rules so severity bands do

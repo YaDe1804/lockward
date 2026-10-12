@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;

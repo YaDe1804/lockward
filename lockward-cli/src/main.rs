@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Lockward command-line interface.
 //!
 //! The binary is a thin wrapper. Analysis lives in `lockward-core` and never
@@ -24,8 +26,12 @@ use tracing_subscriber::EnvFilter;
 #[command(
     name = "lockward",
     version,
+    long_version = concat!(
+        env!("CARGO_PKG_VERSION"),
+        "\nAGPL-3.0, Quellcode: https://github.com/YaDe1804/lockward"
+    ),
     about = "Supply-Chain-Firewall und Backdoor-Risiko-Scanner",
-    long_about = "Lockward prüft npm-Lockfiles auf bekannte Schwachstellen, Install-Hooks und backdoor-ähnliche Muster. Mode 1 ist rein statisch und führt keinen Paketcode aus."
+    long_about = "Lockward prüft npm-Lockfiles auf bekannte Schwachstellen, Install-Hooks und backdoor-ähnliche Muster. Mode 1 ist rein statisch und führt keinen Paketcode aus.\n\nAGPL-3.0, Quellcode: https://github.com/YaDe1804/lockward"
 )]
 struct Cli {
     /// Erhöht die Log-Ausführlichkeit (`-v` info, `-vv` debug, `-vvv` trace).

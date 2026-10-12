@@ -2,20 +2,20 @@
 
 ## Kontext
 
-Phase 1 braucht eine einzelne Binary, die in CI deterministisch läuft. Die Arbeitsanweisung lässt Rust oder Go zu und nimmt Rust, Open-Core und npm-zuerst an.
+Phase 1 braucht eine einzelne Binary, die in CI deterministisch läuft. Gewählt sind Rust, ein offener Core und npm zuerst.
 
 ## Entscheidung
 
 - Implementierungssprache ist Rust (Edition 2024, Toolchain stable).
 - Cargo-Workspace mit `lockward-core` (Bibliothek) und `lockward-cli` (Binary `lockward`).
 - `unsafe` ist workspace-weit verboten.
-- Menschenlesbare Oberflächen (CLI-Hilfe, PR-Kommentar, CI-Summary, Explain-Sätze) sind Deutsch, passend zur DACH-Positionierung der Spezifikation. JSON-Feldnamen und Regel-IDs bleiben Englisch, damit Golden-Files und CI-Parser stabil sind. Interne Tracing-Logs sind Englisch.
+- Menschenlesbare Oberflächen (CLI-Hilfe, PR-Kommentar, CI-Summary, Explain-Sätze) sind Deutsch, für eine deutschsprachige Zielgruppe im DACH-Raum. JSON-Feldnamen und Regel-IDs bleiben Englisch, damit Golden-Files und CI-Parser stabil sind. Interne Tracing-Logs sind Englisch.
 - Es wird keine Lizenzdatei angelegt, bis Open-Core rechtlich festgelegt ist. `publish = false`.
 - Releases werden keyless mit cosign (`sigstore/cosign-installer@v4.1.2`) über die GitHub-OIDC-Identität signiert. Signiert wird die `SHA256SUMS`-Datei, nicht jeder Blob einzeln.
 
 ## Begründung
 
-Rust liefert eine einzelne Binary ohne Runtime, passt zu einem Security-Tool und ist die in der Arbeitsanweisung angenommene Wahl. Deutsch in Reports trifft die in der Spezifikation genannte DACH-Differenzierung; englische JSON-Schlüssel bleiben ein stabiler Maschinenvertrag. Die Lizenz bleibt offen, damit nachts keine Lizenzwahl stillschweigend festgeschrieben wird.
+Rust liefert eine einzelne Binary ohne Runtime und passt zu einem Security-Tool. Deutsch in Reports trifft die DACH-Differenzierung; englische JSON-Schlüssel bleiben ein stabiler Maschinenvertrag.
 
 ## Alternativen
 

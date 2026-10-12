@@ -3,6 +3,7 @@ name = "lockward-core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 publish.workspace = true
 description = "Static supply-chain analysis library for the Lockward scanner."
 readme = "README.md"

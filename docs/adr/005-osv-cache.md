@@ -23,4 +23,4 @@ Fail-closed online verhindert ein stilles „keine CVEs“, wenn die API fehlt. 
 
 - Nur die Batch-IDs speichern und Details jedes Mal nachladen: Offline-Lauf hätte keine Schwere.
 - Netzwerkfehler als leeres Ergebnis: False Negative bei known-vulnerable.
-- Eigene CVE-Datenbank: widerspricht der Spezifikation („keine eigene Kuratierung“).
+- Eigene CVE-Datenbank: Lockward kuratiert keine eigenen Advisories und bleibt bei OSV.

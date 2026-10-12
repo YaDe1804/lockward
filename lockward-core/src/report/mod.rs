@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Render a finished scan as Markdown, a CI summary, JSON, or CycloneDX.
 
 use crate::advisories::Severity;

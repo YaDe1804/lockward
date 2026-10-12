@@ -2,7 +2,7 @@
 
 ## Kontext
 
-AP1.7 braucht die fünf Default-Regeln aus der Spezifikation, eine ladbare YAML-Policy, Warn-First als Baseline und Exit-Codes 0/1/2. Der Scanner darf das Repository nicht verändern.
+AP1.7 braucht fünf Default-Regeln, eine ladbare YAML-Policy, Warn-First als Baseline und Exit-Codes 0/1/2. Der Scanner darf das Repository nicht verändern.
 
 ## Entscheidung
 

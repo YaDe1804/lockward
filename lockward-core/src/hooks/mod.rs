@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Static install-hook detector for npm manifests.
 //!
 //! Reads `scripts` from `package.json` files that belong to lockfile entries.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Deterministic risk score with a plain-language explanation per finding.
 //!
 //! Points come only from advisory severity and heuristic rule weights. The

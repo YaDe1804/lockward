@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! YAML policy gate.
 //!
 //! Warn-first mode reports violations but does not fail the process. Enforce

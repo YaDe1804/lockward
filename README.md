@@ -1,8 +1,8 @@
 # Lockward
 
-Supply-Chain Firewall und Backdoor-Risk-Scanner (Codename „Rat der Weisen“).
+Supply-Chain-Firewall und Backdoor-Risiko-Scanner für npm.
 
-Phase 1 ist eine einzelne statische CLI. Sie liest ein npm-Repository, bewertet Lockfile und Install-Hooks und setzt ein CI-Gate. **Mode 1 führt keinen Paketcode aus.**
+Lockward liest ein Repository, bewertet Lockfile und Install-Hooks und setzt ein CI-Gate. Die Analyse ist rein statisch und führt keinen Paketcode aus.
 
 ## Layout
 
@@ -48,8 +48,12 @@ cargo audit
 
 ## Lizenz
 
-Open-Core ist vorgesehen (CLI und CI-Gate frei, späteres Dashboard separat). Eine konkrete Lizenz ist noch nicht gewählt und wird nicht stillschweigend angenommen.
+Lockward ist **dual-lizenziert**:
 
-## Referenzen
+- **Open Source:** GNU AGPL-3.0-only (siehe `LICENSE`). Frei nutzbar, inkl.
+  der Copyleft-Pflichten bei Weitergabe oder Netzdienst.
+- **Kommerzielle Lizenz:** für Nutzung ohne AGPL-Pflichten (geschlossene
+  Produkte, Hosted Service, AGPL-freie Umgebungen) — siehe
+  `COMMERCIAL-LICENSE.md`.
 
-Die Dateien `Cursor-Arbeitsanweisung_Phase1_MVP-CLI.md`, `supply_chain_scanner_roadmap_v1.html` und `supply_chain_scanner_roadmap_v2.html` sind Vorgaben und werden von diesem Baum nicht fortgeschrieben.
+Rechteinhaber ist die Yayvan UG (haftungsbeschränkt). Beiträge werden unter den Bedingungen in `CONTRIBUTING.md` / `CLA.md` angenommen, damit das Dual-Licensing möglich bleibt.
