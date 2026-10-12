@@ -48,5 +48,9 @@ jobs:
           if [ "$code" -gt 1 ]; then
             exit "$code"
           fi
-          python -m pip install --disable-pip-version-check check-jsonschema
-          check-jsonschema --schemafile target/cdx-schema/bom-1.6.schema.json target/licenses.cdx.json
+          if command -v pipx >/dev/null 2>&1; then
+            pipx run check-jsonschema --schemafile target/cdx-schema/bom-1.6.schema.json target/licenses.cdx.json
+          else
+            python3 -m pip install --break-system-packages --disable-pip-version-check check-jsonschema
+            check-jsonschema --schemafile target/cdx-schema/bom-1.6.schema.json target/licenses.cdx.json
+          fi
