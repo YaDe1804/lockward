@@ -14,3 +14,5 @@ rules:
     min_severity: high
   secret_path_access:
     action: fail
+  advisory_coverage:
+    action: warn

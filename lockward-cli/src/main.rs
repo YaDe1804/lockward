@@ -365,9 +365,9 @@ fn print_summary(analysis: &Analysis) -> Result<()> {
             .map(|package| package.advisories.len())
             .sum::<usize>()
     );
-    if analysis.advisories.cache_misses > 0 {
+    if analysis.advisories.offline && analysis.advisories.cache_misses > 0 {
         println!(
-            "Hinweis: {} Pakete hatten keinen Advisory-Cache-Eintrag.",
+            "Advisory-Abdeckung: {} Pakete nicht gegen OSV geprüft (offline, kein/stale Cache).",
             analysis.advisories.cache_misses
         );
     }
