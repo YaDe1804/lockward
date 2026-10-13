@@ -1,0 +1,3 @@
+expected: malicious
+expected_rules: [install_scripts, no_outbound_build]
+source: "ua-parser-js 2021 (postinstall downloader) — rekonstruiertes Muster, inerter Payload"

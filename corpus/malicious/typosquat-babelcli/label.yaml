@@ -1,0 +1,3 @@
+expected: malicious
+expected_rules: [install_scripts, no_outbound_build]
+source: "babelcli 2017 (Typosquat von babel-cli) — rekonstruiertes Muster, inerter Payload"

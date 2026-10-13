@@ -1,0 +1,3 @@
+expected: benign
+expected_rules: []
+source: "lodash ohne Install-Hook — bereinigter Lockfile-Ausschnitt"

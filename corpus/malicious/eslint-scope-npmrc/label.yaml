@@ -1,0 +1,3 @@
+expected: malicious
+expected_rules: [install_scripts, secret_path_access]
+source: "eslint-scope 2018 — rekonstruiertes Muster, inerter Payload"

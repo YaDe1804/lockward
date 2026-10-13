@@ -1,0 +1,4 @@
+expected: benign
+expected_rules: []
+source: "Legitimes Paket mit eingebettetem Base64-Asset — inerter Platzhalter"
+notes: "Der Base64-Block ist die harmlose Lockward-Fixture, kein Payload. Soll Heuristik-Fehlalarme sichtbar machen."

@@ -1,0 +1,4 @@
+expected: malicious
+expected_rules: []
+source: "node-ipc 2022 (Protestware, Grenzfall) — rekonstruiertes Muster, inerter Payload"
+notes: "Grenzfall: Protestware lag im Bibliothekscode, nicht in einem Install-Hook. Es gibt dafür keine bestehende Lockward-Regel. Der Payload ist ein Marker, kein Original."
