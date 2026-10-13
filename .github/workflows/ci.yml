@@ -54,3 +54,31 @@ jobs:
             python3 -m pip install --break-system-packages --disable-pip-version-check check-jsonschema
             check-jsonschema --schemafile target/cdx-schema/bom-1.6.schema.json target/licenses.cdx.json
           fi
+
+  corpus:
+    name: corpus
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+
+      - name: Measure corpus
+        run: cargo run --locked -p lockward-eval -- --output corpus-report.json | tee corpus-summary.txt
+
+      - name: Step summary
+        run: |
+          {
+            echo '## Lockward corpus'
+            echo
+            echo 'Messung von Install-Hooks und Heuristiken. Kein Schwellen-Gate.'
+            echo
+            echo '```'
+            cat corpus-summary.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: corpus-report
+          path: corpus-report.json
