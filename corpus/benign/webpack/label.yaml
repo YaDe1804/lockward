@@ -1,3 +1,4 @@
 expected: benign
 expected_rules: []
+cohort: clean
 source: "webpack ohne Install-Hook — bereinigter Lockfile-Ausschnitt"

@@ -1,0 +1,4 @@
+expected: benign
+expected_rules: []
+cohort: clean
+source: "dotenv ohne Install-Hook — bereinigter Lockfile-Ausschnitt"

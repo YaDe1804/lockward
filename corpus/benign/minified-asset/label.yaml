@@ -1,4 +1,5 @@
 expected: benign
 expected_rules: []
+cohort: heuristic_probe
 source: "Legitimes Paket mit minifiziertem Platzhalter im Hook — inerter Marker"
 notes: "fromCharCode steht nur im console.log-String, um einen Heuristik-Fehlalarm zu provozieren."
