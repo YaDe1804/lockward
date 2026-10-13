@@ -36,6 +36,7 @@ Jeder Fall hat `package-lock.json` (lockfileVersion 3), bei Bedarf
 ```yaml
 expected: malicious            # malicious | benign
 expected_rules: [install_scripts, no_outbound_build]
+cohort: held_out_install          # optional, nur bei benign: clean | allowlisted_install | held_out_install | heuristic_probe
 source: "Vorfall — rekonstruiertes Muster, inerter Payload"
 notes: "optional"
 ```
@@ -44,8 +45,26 @@ notes: "optional"
 `LW-H00x`). Bei gutartigen Fällen ist die Liste leer. `advisory_coverage` und
 `new_dependencies` gehören nicht dazu.
 
-`corpus/eval-policy.yaml` setzt `advisory_coverage` auf `allow`, damit der
-Offline-Lauf die Hook- und Heuristik-Erkennung isoliert.
+`cohort` trennt die gutartigen Fälle für die ehrliche FP-Rate:
+
+- `allowlisted_install`: kuratierter Name, Install-Script erwartet
+- `held_out_install`: legitimes Install-Script, Name **nicht** auf der Allowlist
+- `clean`: kein Install-Hook
+- `heuristic_probe`: Hook nur, um eine Heuristik zu provozieren
+
+Held-out-Namen werden nicht nachträglich auf die Allowlist gesetzt.
+
+## Bekannte Grenze
+
+`malicious/node-ipc-protestware` bleibt ein False Negative. Die Protestware lag
+im Bibliothekscode, nicht in einem Install-Hook. Mode 1 liest `index.js` nicht.
+Das ist keine offene Heuristik-Lücke für diesen Schritt: eine Suche über
+beliebige Quelldateien würde neue Fehlalarme erzeugen. Kandidat für eine spätere
+Content-Heuristik oder Mode 2.
+
+`corpus/eval-policy.yaml` setzt `advisory_coverage` auf `allow` und übernimmt
+die kuratierte Install-Script-Allowlist, damit der Offline-Lauf die Hook- und
+Heuristik-Erkennung misst. `known_vulnerable` bleibt ohne Cache leer.
 
 ## Harness
 
@@ -53,5 +72,7 @@ Offline-Lauf die Hook- und Heuristik-Erkennung isoliert.
 cargo run --locked -p lockward-eval -- --output corpus-report.json
 ```
 
-Die Ausgabe ist die Confusion-Matrix, Precision/Recall/F1 und die Liste jedes
-FN und FP. Schwellen werden hier nicht geändert.
+Die Ausgabe ist die Confusion-Matrix, Precision, FP-Rate, Recall und F1, die
+Listen jedes FN und FP, und die FP-Rate getrennt für allowlistete und
+Held-out-Install-Scripts. Der Korpus ist gutartig-lastig. Schwellen werden hier
+nicht an den Held-out-Fällen nachgezogen.

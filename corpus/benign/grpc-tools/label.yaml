@@ -1,0 +1,5 @@
+expected: benign
+expected_rules: []
+cohort: held_out_install
+source: "grpc-tools — legitimer nativer Install, nicht grpc und nicht allowlisted"
+notes: "Held-out: legitimes Install-Script, Name steht nicht in der kuratierten Allowlist."

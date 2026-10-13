@@ -11,7 +11,7 @@ use serde::Serialize;
 use std::sync::LazyLock;
 
 /// Rule-set version written into reports.
-pub const ENGINE_VERSION: &str = "heuristics-v1";
+pub const ENGINE_VERSION: &str = "heuristics-v1.1";
 
 const MAX_EVIDENCE: usize = 120;
 
@@ -63,10 +63,12 @@ pub fn rules() -> &'static [RuleInfo] {
     &RULES
 }
 
-/// Run every v1 rule over hook bodies.
+/// Run every v1.1 rule over hook bodies.
 ///
 /// Empty bodies (lockfile flags without a manifest) produce no hits.
-/// Each rule fires at most once per hook.
+/// Each rule fires at most once per hook. `LW-H002` is dropped when it is the
+/// only hit on that hook: a base64 blob without a second signal is data, not
+/// an obfuscated payload.
 #[must_use]
 pub fn evaluate(hooks: &[HookFinding]) -> Vec<HeuristicFinding> {
     let mut findings = Vec::new();
@@ -74,6 +76,7 @@ pub fn evaluate(hooks: &[HookFinding]) -> Vec<HeuristicFinding> {
         if hook.raw.is_empty() {
             continue;
         }
+        let mut hook_hits = Vec::new();
         for rule in COMPILED.iter() {
             let mat = if rule.info.id == "LW-H002" {
                 rule.pattern
@@ -88,7 +91,7 @@ pub fn evaluate(hooks: &[HookFinding]) -> Vec<HeuristicFinding> {
                     "Paket {}@{} Hook `{}`: {}. Beleg: `{evidence}`.",
                     hook.package_name, hook.package_version, hook.hook, rule.reason,
                 );
-                findings.push(HeuristicFinding {
+                hook_hits.push(HeuristicFinding {
                     rule_id: rule.info.id,
                     description: rule.info.description,
                     weight: rule.info.weight,
@@ -101,6 +104,11 @@ pub fn evaluate(hooks: &[HookFinding]) -> Vec<HeuristicFinding> {
                 });
             }
         }
+        let corroborated = hook_hits.iter().any(|hit| hit.rule_id != "LW-H002");
+        if !corroborated {
+            hook_hits.retain(|hit| hit.rule_id != "LW-H002");
+        }
+        findings.extend(hook_hits);
     }
     findings
 }
@@ -145,15 +153,15 @@ fn compile(pattern: &str) -> Regex {
 static RULES: [RuleInfo; 6] = [
     RuleInfo {
         id: "LW-H001",
-        description: "Obfuskation im Hook (eval, new Function, fromCharCode, atob, Hex-Escapes)",
+        description: "Obfuskation im Hook (eval, new Function, atob, unescape, Hex-Escapes)",
         weight: 25,
         example: r#"eval(Buffer.from("aGVsbG8=", "base64").toString())"#,
     },
     RuleInfo {
         id: "LW-H002",
-        description: "Großer Base64-Block (mindestens 80 Zeichen, gemischter Zeichensatz)",
+        description: "Großer Base64-Block, nur zusammen mit einem zweiten Hook-Signal",
         weight: 20,
-        example: "const blob = \"bG9ja3dhcmQgaGV1cmlzdGljIGZpeHR1cmUgcGF5bG9hZCB0aGF0IGlzIGxvbmcgZW5vdWdoIGZvciB0aGUgYmFzZTY0IHJ1bGU=\";",
+        example: "curl https://example.invalid/x; const blob = \"bG9ja3dhcmQgaGV1cmlzdGljIGZpeHR1cmUgcGF5bG9hZCB0aGF0IGlzIGxvbmcgZW5vdWdoIGZvciB0aGUgYmFzZTY0IHJ1bGU=\";",
     },
     RuleInfo {
         id: "LW-H003",
@@ -187,7 +195,7 @@ static COMPILED: LazyLock<Vec<CompiledRule>> = LazyLock::new(|| {
             info: RULES[0],
             reason: "der Hook enthält obfuskierten Code",
             pattern: compile(
-                r#"(?i)\beval\s*\(|\bnew\s+Function\s*\(|fromCharCode|\batob\s*\(|\bunescape\s*\(|(?:\\x[0-9a-fA-F]{2}){4,}"#,
+                r#"(?i)\beval\s*\(|\bnew\s+Function\s*\(|\batob\s*\(|\bunescape\s*\(|(?:\\x[0-9a-fA-F]{2}){4,}"#,
             ),
         },
         CompiledRule {
@@ -250,7 +258,7 @@ mod tests {
 
     #[test]
     fn engine_version_and_catalog_are_stable() {
-        assert_eq!(ENGINE_VERSION, "heuristics-v1");
+        assert_eq!(ENGINE_VERSION, "heuristics-v1.1");
         let ids: Vec<_> = rules().iter().map(|rule| rule.id).collect();
         assert_eq!(
             ids,
@@ -297,11 +305,17 @@ mod tests {
             ))
             .contains(&"LW-H002")
         );
-        assert_eq!(
+        assert!(
             ids(
                 "const blob = \"bG9ja3dhcmQgaGV1cmlzdGljIGZpeHR1cmUgcGF5bG9hZCB0aGF0IGlzIGxvbmcgZW5vdWdoIGZvciB0aGUgYmFzZTY0IHJ1bGU=\";"
-            ),
-            ["LW-H002"]
+            )
+            .is_empty()
+        );
+        assert!(
+            ids(
+                "curl https://example.invalid/x; const blob = \"bG9ja3dhcmQgaGV1cmlzdGljIGZpeHR1cmUgcGF5bG9hZCB0aGF0IGlzIGxvbmcgZW5vdWdoIGZvciB0aGUgYmFzZTY0IHJ1bGU=\";"
+            )
+            .contains(&"LW-H002")
         );
     }
 
@@ -309,6 +323,10 @@ mod tests {
     fn function_constructor_requires_new() {
         assert!(!ids("const name = Function(\"return 1\")").contains(&"LW-H001"));
         assert!(ids("const evil = new Function(\"return 1\")").contains(&"LW-H001"));
+        assert!(
+            !ids("function map(s){return s.split('').map(fromCharCode).join('')}")
+                .contains(&"LW-H001")
+        );
     }
 
     #[test]
