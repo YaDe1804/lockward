@@ -502,7 +502,7 @@ mod tests {
 
         let parsed: Value = serde_json::from_str(&json_text).unwrap();
         assert_eq!(parsed["gate"]["exit_code"], 1);
-        assert!(parsed["heuristics_version"] == "heuristics-v1");
+        assert!(parsed["heuristics_version"] == "heuristics-v1.1");
 
         let cdx: Value = serde_json::from_str(&bom).unwrap();
         assert_eq!(cdx["bomFormat"], "CycloneDX");

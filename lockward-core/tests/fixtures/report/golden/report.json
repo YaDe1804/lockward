@@ -1,7 +1,7 @@
 {
   "lockward_version": "0.1.0",
   "score_version": "score-v1",
-  "heuristics_version": "heuristics-v1",
+  "heuristics_version": "heuristics-v1.1",
   "scanned_at": "2026-10-12T00:00:00Z",
   "target": "{root}",
   "lockfile": "{root}/package-lock.json",
@@ -46,7 +46,7 @@
       "rule": "install_scripts",
       "package_name": "mini-app",
       "package_version": "1.0.0",
-      "configured_action": "warn",
+      "configured_action": "fail",
       "effective_action": "warn",
       "message": "Install-Hook `postinstall` in mini-app@1.0.0 ist nicht auf der Allowlist."
     },
