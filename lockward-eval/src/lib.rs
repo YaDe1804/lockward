@@ -9,6 +9,7 @@
 #![forbid(unsafe_code)]
 
 use lockward_core::advisories::HttpTransport;
+use lockward_core::policy::expected_binary_fetch;
 use lockward_core::scan::{AnalyzeOptions, analyze};
 use lockward_core::{Error as CoreError, Result as CoreResult, load_policy};
 use serde::Deserialize;
@@ -22,7 +23,7 @@ use std::path::{Path, PathBuf};
 pub const SCANNED_AT: &str = "2026-10-13T00:00:00Z";
 
 const SCOPE: &str = "hooks_and_heuristics";
-const SCOPE_NOTE: &str = "Dieser Korpus misst Install-Hooks und Heuristiken. known_vulnerable bleibt offline ohne Cache leer und ist hier keine vollständige OSV-Messung.";
+const SCOPE_NOTE: &str = "Dieser Korpus misst Install-Hooks und Heuristiken und ist bewusst gutartig-lastig. Precision und FP-Rate sind die Leitkennzahlen. known_vulnerable bleibt offline ohne Cache leer und ist hier keine vollständige OSV-Messung.";
 
 /// Policy rules that count as a detection. `advisory_coverage` and
 /// `new_dependencies` are intentionally absent.
@@ -112,6 +113,8 @@ pub struct FalseNegative {
 pub struct FalsePositive {
     /// `benign/<name>`.
     pub case: String,
+    /// `clean`, `allowlisted_install`, `held_out_install`, or `heuristic_probe`.
+    pub cohort: String,
     /// Detection-set rules that fired.
     pub fired: Vec<String>,
 }
@@ -133,11 +136,26 @@ pub struct CaseResult {
     pub fired: Vec<String>,
     /// Expected rules absent from `fired`.
     pub missing_rules: Vec<String>,
+    /// Measurement bucket. Malicious cases use `malicious`.
+    pub cohort: String,
     /// Provenance line from the label.
     pub source: String,
     /// Optional label note.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
+}
+
+/// Flag rate inside one measurement bucket.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CohortStats {
+    /// `allowlisted_install`, `held_out_install`, `clean`, `heuristic_probe`, or `malicious`.
+    pub cohort: String,
+    /// Cases in the bucket.
+    pub cases: u32,
+    /// Cases the detection set flagged.
+    pub flagged: u32,
+    /// `flagged / cases` for benign buckets. `n/a` for malicious.
+    pub false_positive_rate: String,
 }
 
 /// Machine-readable corpus report.
@@ -163,6 +181,8 @@ pub struct Report {
     pub false_negatives: Vec<FalseNegative>,
     /// Benign cases with a detection-set hit.
     pub false_positives: Vec<FalsePositive>,
+    /// Flag rates split by cohort. Held-out is not used to extend the allowlist.
+    pub cohorts: Vec<CohortStats>,
     /// Every case, sorted by id.
     pub cases: Vec<CaseResult>,
 }
@@ -175,6 +195,8 @@ struct Label {
     source: String,
     #[serde(default)]
     notes: Option<String>,
+    #[serde(default)]
+    cohort: Option<String>,
 }
 
 struct Offline;
@@ -218,6 +240,12 @@ pub fn render_text(report: &Report) -> String {
     let mut out = String::new();
     push(&mut out, &report.scope_note);
     push(&mut out, &format!("scanned_at: {}", report.scanned_at));
+    let benign = report.confusion.fp + report.confusion.tn;
+    let malicious = report.confusion.tp + report.confusion.fn_count;
+    push(
+        &mut out,
+        &format!("Fälle: {benign} gutartig, {malicious} bösartig"),
+    );
     push(&mut out, "");
     push(
         &mut out,
@@ -261,6 +289,21 @@ pub fn render_text(report: &Report) -> String {
             report.metrics.false_positive_rate
         ),
     );
+    push(&mut out, "");
+    push(&mut out, "FP-Rate nach Kohorte (Allowlist vs. Held-out)");
+    push(
+        &mut out,
+        &format!("{:<24} {:>8} {:>10}  fp_rate", "cohort", "cases", "flagged"),
+    );
+    for cohort in &report.cohorts {
+        push(
+            &mut out,
+            &format!(
+                "{:<24} {:>8} {:>10}  {}",
+                cohort.cohort, cohort.cases, cohort.flagged, cohort.false_positive_rate
+            ),
+        );
+    }
     push(&mut out, "");
     push(
         &mut out,
@@ -312,7 +355,12 @@ pub fn render_text(report: &Report) -> String {
     for hit in &report.false_positives {
         push(
             &mut out,
-            &format!("- {}  fired=[{}]", hit.case, hit.fired.join(", ")),
+            &format!(
+                "- {}  cohort={}  fired=[{}]",
+                hit.case,
+                hit.cohort,
+                hit.fired.join(", ")
+            ),
         );
     }
     out
@@ -383,11 +431,14 @@ fn evaluate_case(
         }
     }
     for finding in &analysis.heuristics {
+        if finding.rule_id == "LW-H003" && expected_binary_fetch(policy, &finding.package_name) {
+            continue;
+        }
         if finding.rule_id.starts_with("LW-H") {
             fired.insert(finding.rule_id.to_owned());
         }
     }
-    let expected_rules = unique_sorted(label.expected_rules);
+    let expected_rules = unique_sorted(label.expected_rules.clone());
     let missing_rules: Vec<String> = expected_rules
         .iter()
         .filter(|rule| !fired.contains(*rule))
@@ -402,6 +453,13 @@ fn evaluate_case(
         (false, true) => "fp",
         (false, false) => "tn",
     };
+    let names: BTreeSet<String> = analysis
+        .hooks
+        .findings
+        .iter()
+        .map(|finding| finding.package_name.clone())
+        .collect();
+    let cohort = cohort_of(&label, &names, policy, &id)?;
     Ok(CaseResult {
         id,
         expected: label.expected,
@@ -410,6 +468,7 @@ fn evaluate_case(
         expected_rules,
         fired,
         missing_rules,
+        cohort,
         source: label.source,
         notes: label.notes,
     })
@@ -443,6 +502,7 @@ fn assemble(policy_name: String, cases: Vec<CaseResult>) -> Report {
         if case.outcome == "fp" {
             false_positives.push(FalsePositive {
                 case: case.id.clone(),
+                cohort: case.cohort.clone(),
                 fired: case.fired.clone(),
             });
         }
@@ -475,8 +535,9 @@ fn assemble(policy_name: String, cases: Vec<CaseResult>) -> Report {
             }
         })
         .collect();
+    let cohorts = cohort_stats(&cases);
     Report {
-        schema_version: 1,
+        schema_version: 2,
         scope: SCOPE.to_owned(),
         scope_note: SCOPE_NOTE.to_owned(),
         scanned_at: SCANNED_AT.to_owned(),
@@ -494,8 +555,82 @@ fn assemble(policy_name: String, cases: Vec<CaseResult>) -> Report {
         rule_recall,
         false_negatives,
         false_positives,
+        cohorts,
         cases,
     }
+}
+
+fn cohort_of(
+    label: &Label,
+    names: &BTreeSet<String>,
+    policy: &lockward_core::Policy,
+    id: &str,
+) -> Result<String, Error> {
+    let malicious = label.expected == "malicious";
+    let inferred = if malicious {
+        "malicious"
+    } else if names.is_empty() {
+        "clean"
+    } else if names.iter().all(|name| {
+        policy
+            .rules
+            .install_scripts
+            .allow
+            .iter()
+            .any(|allowed| allowed == name)
+    }) {
+        "allowlisted_install"
+    } else {
+        "held_out_install"
+    };
+    let Some(declared) = label.cohort.as_deref() else {
+        if malicious {
+            return Ok("malicious".to_owned());
+        }
+        return Err(Error::Label {
+            path: id.to_owned(),
+            message: "gutartige Fälle brauchen cohort".to_owned(),
+        });
+    };
+    let ok = match declared {
+        "heuristic_probe" => inferred == "held_out_install",
+        "malicious" => malicious,
+        other => other == inferred,
+    };
+    if !ok {
+        return Err(Error::Label {
+            path: id.to_owned(),
+            message: format!("cohort {declared} passt nicht zur Allowlist ({inferred})"),
+        });
+    }
+    Ok(declared.to_owned())
+}
+
+fn cohort_stats(cases: &[CaseResult]) -> Vec<CohortStats> {
+    let mut names = BTreeSet::new();
+    for case in cases {
+        names.insert(case.cohort.clone());
+    }
+    names
+        .into_iter()
+        .map(|cohort| {
+            let bucket: Vec<_> = cases.iter().filter(|case| case.cohort == cohort).collect();
+            let count = u32::try_from(bucket.len()).unwrap_or(u32::MAX);
+            let flagged = u32::try_from(bucket.iter().filter(|case| case.flagged).count())
+                .unwrap_or(u32::MAX);
+            let false_positive_rate = if cohort == "malicious" {
+                "n/a".to_owned()
+            } else {
+                ratio(flagged, count)
+            };
+            CohortStats {
+                cohort,
+                cases: count,
+                flagged,
+                false_positive_rate,
+            }
+        })
+        .collect()
 }
 
 fn read_label(path: &Path, id: &str) -> Result<Label, Error> {
@@ -602,6 +737,88 @@ mod tests {
         assert!(text.contains("False negatives"));
         assert!(text.contains("False positives"));
         assert!(text.contains(SCOPE_NOTE));
+        assert!(text.contains("FP-Rate nach Kohorte"));
+    }
+
+    #[test]
+    fn tuning_keeps_staged_detection_and_does_not_absorb_held_out() {
+        let report = evaluate(&corpus(), &policy()).expect("scan");
+        let case = |id: &str| {
+            report
+                .cases
+                .iter()
+                .find(|item| item.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+        assert_eq!(case("malicious/ua-parser-js-staged").outcome, "tp");
+        assert_eq!(case("malicious/node-ipc-protestware").outcome, "fn");
+        assert!(
+            case("malicious/crypto-stealer-combo")
+                .fired
+                .iter()
+                .any(|rule| rule == "LW-H001")
+        );
+        assert!(
+            case("malicious/crypto-stealer-combo")
+                .fired
+                .iter()
+                .any(|rule| rule == "LW-H002")
+        );
+        assert!(
+            case("malicious/obfuscated-hook")
+                .fired
+                .iter()
+                .any(|rule| rule == "LW-H001")
+        );
+        assert!(
+            case("malicious/obfuscated-hook")
+                .fired
+                .iter()
+                .any(|rule| rule == "LW-H002")
+        );
+        assert!(
+            !case("benign/embedded-asset")
+                .fired
+                .iter()
+                .any(|rule| rule == "LW-H002")
+        );
+        assert!(
+            !case("benign/minified-asset")
+                .fired
+                .iter()
+                .any(|rule| rule == "LW-H001")
+        );
+        assert!(!case("benign/puppeteer").flagged);
+        assert!(!case("benign/esbuild").flagged);
+        let allowlisted = report
+            .cohorts
+            .iter()
+            .find(|item| item.cohort == "allowlisted_install")
+            .expect("allowlisted cohort");
+        assert_eq!(allowlisted.flagged, 0);
+        let held = report
+            .cohorts
+            .iter()
+            .find(|item| item.cohort == "held_out_install")
+            .expect("held-out cohort");
+        assert!(held.cases >= 10);
+        let policy = load_policy(&policy()).expect("policy");
+        for item in report
+            .cases
+            .iter()
+            .filter(|item| item.cohort == "held_out_install")
+        {
+            assert!(
+                !policy
+                    .rules
+                    .install_scripts
+                    .allow
+                    .iter()
+                    .any(|name| item.id.ends_with(name.as_str())),
+                "{} steht auf der Allowlist",
+                item.id
+            );
+        }
     }
 
     #[test]
