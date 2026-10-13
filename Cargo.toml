@@ -1,5 +1,5 @@
 [workspace]
-members = ["lockward-core", "lockward-cli"]
+members = ["lockward-core", "lockward-cli", "lockward-eval"]
 resolver = "2"
 
 [workspace.package]
