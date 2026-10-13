@@ -39,13 +39,13 @@ Exit codes: `0` clean · `1` warnings/review · `2` fail (enforce mode) or runti
 
 ### In CI (GitHub Actions)
 ```yaml
-- uses: YaDe1804/lockward@v0.1.0   # available with the v0.1.0 release
+- uses: YaDe1804/lockward@v0.1.1   # from the GitHub Marketplace
   with:
     path: .
     mode: warn        # or "enforce"
     comment: "true"   # post findings as a PR comment
 ```
-> Until the Marketplace release, the composite action lives at `.github/actions/lockward`.
+A local composite action also lives at `.github/actions/lockward` for running from source.
 
 ### What a finding looks like
 On a pull request, Lockward posts a comment and fails the check:
