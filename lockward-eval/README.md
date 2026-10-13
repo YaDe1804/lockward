@@ -12,6 +12,10 @@ cargo run --locked -p lockward-eval -- --output corpus-report.json
 `LW-H003` on a known binary fetcher is an expected download and is not a detection.
 A trusted build command and a clean local script are notes, not detections.
 `install_scripts` counts only when the referenced target could not be read.
+A download that does not execute is `review`. Pipe-to-shell, obfuscation,
+shell-out, and secret access are `fail`. Review stays in the detection set, so
+precision and recall do not move when only the hardness changes. The summary
+prints the fail/review/info counts.
 The summary splits the false-positive rate by cohort (`trusted_build`,
 `inspected_clean`, `known_downloader`, `residual_downloader`, `clean`,
 `heuristic_probe`).

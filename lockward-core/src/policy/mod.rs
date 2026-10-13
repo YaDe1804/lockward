@@ -3,7 +3,8 @@
 //! YAML policy gate.
 //!
 //! Warn-first mode reports violations but does not fail the process. Enforce
-//! mode keeps the configured action. The scanner never rewrites the repository.
+//! mode exits 2 only for fail actions. A download that does not execute is
+//! review and exits 1. The scanner never rewrites the repository.
 
 use crate::advisories::{AdvisoryReport, Severity};
 use crate::heuristics::HeuristicFinding;
@@ -262,6 +263,7 @@ pub fn decide(policy: &Policy, input: Evaluation<'_>) -> Decision {
     consider_vulnerabilities(policy, input.advisories, &mut violations);
     consider_advisory_coverage(policy, input.advisories, &mut violations);
     consider_secrets(policy, input.heuristics, &mut violations);
+    consider_execution(input.heuristics, &mut violations);
     for violation in &mut violations {
         violation.effective_action = effective(policy.mode, violation.configured_action);
     }
@@ -362,16 +364,64 @@ fn consider_outbound(
         if domain_allowed(&finding.evidence, &rule.allow_domains) {
             continue;
         }
+        let action = outbound_action(rule.action, finding.rule_id);
         violations.push(Violation {
             rule: "no_outbound_build",
             package_name: finding.package_name.clone(),
             package_version: finding.package_version.clone(),
-            configured_action: rule.action,
-            effective_action: rule.action,
-            message: format!(
-                "Hook `{}` in {}@{} spricht während der Installation mit dem Netzwerk ({}).",
+            configured_action: action,
+            effective_action: action,
+            message: outbound_message(finding),
+        });
+    }
+}
+
+/// Pipe-to-shell stays at the configured action. A bare download is review
+/// when the rule would otherwise fail the build: loading is not execution.
+fn outbound_action(configured: Action, rule_id: &str) -> Action {
+    if rule_id == "LW-H003" && configured == Action::Fail {
+        Action::Review
+    } else {
+        configured
+    }
+}
+
+fn outbound_message(finding: &HeuristicFinding) -> String {
+    if finding.rule_id == "LW-H004" {
+        format!(
+            "Hook `{}` in {}@{} führt heruntergeladenen Inhalt in einer Shell aus ({}).",
+            finding.hook, finding.package_name, finding.package_version, finding.rule_id
+        )
+    } else {
+        format!(
+            "Hook `{}` in {}@{} lädt während der Installation aus dem Netz, ohne den Inhalt auszuführen ({}).",
+            finding.hook, finding.package_name, finding.package_version, finding.rule_id
+        )
+    }
+}
+
+/// Obfuscation and shell-out execute or hide code. A download without either
+/// stays a review via [`consider_outbound`].
+fn consider_execution(heuristics: &[HeuristicFinding], violations: &mut Vec<Violation>) {
+    for finding in heuristics {
+        let message = match finding.rule_id {
+            "LW-H001" | "LW-H002" => format!(
+                "Hook `{}` in {}@{} enthält starke Obfuskation ({}).",
                 finding.hook, finding.package_name, finding.package_version, finding.rule_id
             ),
+            "LW-H005" => format!(
+                "Hook `{}` in {}@{} führt einen Shell- oder Kindprozess aus ({}).",
+                finding.hook, finding.package_name, finding.package_version, finding.rule_id
+            ),
+            _ => continue,
+        };
+        violations.push(Violation {
+            rule: finding.rule_id,
+            package_name: finding.package_name.clone(),
+            package_version: finding.package_version.clone(),
+            configured_action: Action::Fail,
+            effective_action: Action::Fail,
+            message,
         });
     }
 }
@@ -913,17 +963,82 @@ mod tests {
             },
         );
         assert_eq!(hostile_decision.exit_code, 2);
-        assert!(
-            hostile_decision
-                .violations
-                .iter()
-                .any(|item| item.rule == "no_outbound_build")
-        );
+        assert!(hostile_decision.violations.iter().any(|item| {
+            item.rule == "no_outbound_build"
+                && item.configured_action == Action::Fail
+                && item.message.contains("LW-H004")
+        }));
+        assert!(hostile_decision.violations.iter().any(|item| {
+            item.rule == "no_outbound_build"
+                && item.configured_action == Action::Review
+                && item.message.contains("LW-H003")
+        }));
         assert!(
             hostile_decision
                 .violations
                 .iter()
                 .all(|item| item.rule != "install_scripts")
+        );
+    }
+
+    #[test]
+    fn fetch_only_is_review_and_execution_is_fail() {
+        let policy = Policy::default_policy().unwrap().with_mode(Mode::Enforce);
+        let fetch = hook("edgedriver", "https.get(https://example.invalid/binary)");
+        let fetch_hits = evaluate(std::slice::from_ref(&fetch));
+        let fetch_decision = decide(
+            &policy,
+            Evaluation {
+                graph: &graph(),
+                hooks: std::slice::from_ref(&fetch),
+                heuristics: &fetch_hits,
+                advisories: &empty_advisories(),
+                baseline: None,
+            },
+        );
+        assert_eq!(fetch_decision.exit_code, 1);
+        assert!(fetch_decision.violations.iter().all(|item| {
+            item.configured_action == Action::Review && item.rule == "no_outbound_build"
+        }));
+
+        let obfuscated = hook("payload", r#"new Function("return 1")"#);
+        let obfuscated_hits = evaluate(std::slice::from_ref(&obfuscated));
+        let obfuscated_decision = decide(
+            &policy,
+            Evaluation {
+                graph: &graph(),
+                hooks: std::slice::from_ref(&obfuscated),
+                heuristics: &obfuscated_hits,
+                advisories: &empty_advisories(),
+                baseline: None,
+            },
+        );
+        assert_eq!(obfuscated_decision.exit_code, 2);
+        assert!(
+            obfuscated_decision
+                .violations
+                .iter()
+                .any(|item| { item.rule == "LW-H001" && item.configured_action == Action::Fail })
+        );
+
+        let shell = hook("payload", "child_process.execSync(\"echo fixture\")");
+        let shell_hits = evaluate(std::slice::from_ref(&shell));
+        let shell_decision = decide(
+            &policy,
+            Evaluation {
+                graph: &graph(),
+                hooks: std::slice::from_ref(&shell),
+                heuristics: &shell_hits,
+                advisories: &empty_advisories(),
+                baseline: None,
+            },
+        );
+        assert_eq!(shell_decision.exit_code, 2);
+        assert!(
+            shell_decision
+                .violations
+                .iter()
+                .any(|item| item.rule == "LW-H005" && item.configured_action == Action::Fail)
         );
     }
 

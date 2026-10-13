@@ -5,6 +5,7 @@ rules:
     action: review
     allow: []
   no_outbound_build:
+    # Fail is pipe-to-shell. A download that does not execute is review.
     action: fail
     allow_domains: []
   new_dependencies:

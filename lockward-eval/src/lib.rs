@@ -9,7 +9,7 @@
 #![forbid(unsafe_code)]
 
 use lockward_core::advisories::HttpTransport;
-use lockward_core::policy::expected_binary_fetch;
+use lockward_core::policy::{Action, Decision, expected_binary_fetch};
 use lockward_core::scan::{AnalyzeOptions, analyze};
 use lockward_core::{Error as CoreError, Result as CoreResult, load_policy};
 use serde::Deserialize;
@@ -106,6 +106,8 @@ pub struct FalseNegative {
     pub fired: Vec<String>,
     /// Expected rules that did not fire.
     pub missing_rules: Vec<String>,
+    /// `info` for a miss. A flagged case is not a false negative.
+    pub severity: String,
 }
 
 /// A benign case the detection set flagged.
@@ -117,6 +119,8 @@ pub struct FalsePositive {
     pub cohort: String,
     /// Detection-set rules that fired.
     pub fired: Vec<String>,
+    /// `fail` or `review` for a flagged benign case.
+    pub severity: String,
 }
 
 /// One corpus case after the scan.
@@ -130,6 +134,8 @@ pub struct CaseResult {
     pub flagged: bool,
     /// `tp`, `fn`, `fp`, or `tn`.
     pub outcome: String,
+    /// `fail`, `review`, or `info`. Info is not a detection.
+    pub severity: String,
     /// Rules the label says should fire.
     pub expected_rules: Vec<String>,
     /// Detection-set rules that fired.
@@ -143,6 +149,17 @@ pub struct CaseResult {
     /// Optional label note.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
+}
+
+/// Counts of `fail`, `review`, and `info` across every case.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SeverityCounts {
+    /// Execution, obfuscation, secrets, or a high known vulnerability.
+    pub fail: u32,
+    /// Download without execution, or an unreadable install hook.
+    pub review: u32,
+    /// No detection.
+    pub info: u32,
 }
 
 /// Flag rate inside one measurement bucket.
@@ -175,6 +192,8 @@ pub struct Report {
     pub confusion: Confusion,
     /// Precision, recall, F1, and false-positive rate.
     pub metrics: Metrics,
+    /// How many cases are fail, review, or info. Review stays flagged.
+    pub severity: SeverityCounts,
     /// Per-rule recall on malicious cases.
     pub rule_recall: Vec<RuleRecall>,
     /// Malicious cases with no detection-set hit.
@@ -290,6 +309,28 @@ pub fn render_text(report: &Report) -> String {
         ),
     );
     push(&mut out, "");
+    push(&mut out, "Fail vs. Review");
+    push(
+        &mut out,
+        &format!("fail                 {}", report.severity.fail),
+    );
+    push(
+        &mut out,
+        &format!("review               {}", report.severity.review),
+    );
+    push(
+        &mut out,
+        &format!("info                 {}", report.severity.info),
+    );
+    push(&mut out, "Markierte Fälle");
+    let flagged: Vec<_> = report.cases.iter().filter(|case| case.flagged).collect();
+    if flagged.is_empty() {
+        push(&mut out, "(keine)");
+    }
+    for case in flagged {
+        push(&mut out, &format!("- {}  {}", case.id, case.severity));
+    }
+    push(&mut out, "");
     push(&mut out, "FP-Rate nach Kohorte");
     push(
         &mut out,
@@ -340,8 +381,9 @@ pub fn render_text(report: &Report) -> String {
         push(
             &mut out,
             &format!(
-                "- {}  fired=[{}]  missing=[{}]",
+                "- {}  severity={}  fired=[{}]  missing=[{}]",
                 miss.case,
+                miss.severity,
                 miss.fired.join(", "),
                 miss.missing_rules.join(", ")
             ),
@@ -356,9 +398,10 @@ pub fn render_text(report: &Report) -> String {
         push(
             &mut out,
             &format!(
-                "- {}  cohort={}  fired=[{}]",
+                "- {}  cohort={}  severity={}  fired=[{}]",
                 hit.case,
                 hit.cohort,
+                hit.severity,
                 hit.fired.join(", ")
             ),
         );
@@ -453,6 +496,7 @@ fn evaluate_case(
         (false, true) => "fp",
         (false, false) => "tn",
     };
+    let severity = case_severity(&analysis.decision).to_owned();
     let names: BTreeSet<String> = analysis
         .hooks
         .findings
@@ -465,6 +509,7 @@ fn evaluate_case(
         expected: label.expected,
         flagged,
         outcome: outcome.to_owned(),
+        severity,
         expected_rules,
         fired,
         missing_rules,
@@ -497,6 +542,7 @@ fn assemble(policy_name: String, cases: Vec<CaseResult>) -> Report {
                 case: case.id.clone(),
                 fired: case.fired.clone(),
                 missing_rules: case.missing_rules.clone(),
+                severity: case.severity.clone(),
             });
         }
         if case.outcome == "fp" {
@@ -504,6 +550,7 @@ fn assemble(policy_name: String, cases: Vec<CaseResult>) -> Report {
                 case: case.id.clone(),
                 cohort: case.cohort.clone(),
                 fired: case.fired.clone(),
+                severity: case.severity.clone(),
             });
         }
         if case.expected == "malicious" {
@@ -537,7 +584,8 @@ fn assemble(policy_name: String, cases: Vec<CaseResult>) -> Report {
         .collect();
     let cohorts = cohort_stats(&cases);
     Report {
-        schema_version: 2,
+        schema_version: 3,
+        severity: severity_counts(&cases),
         scope: SCOPE.to_owned(),
         scope_note: SCOPE_NOTE.to_owned(),
         scanned_at: SCANNED_AT.to_owned(),
@@ -678,6 +726,44 @@ fn unique_sorted(mut rules: Vec<String>) -> Vec<String> {
     rules
 }
 
+fn case_severity(decision: &Decision) -> &'static str {
+    let mut fail = false;
+    let mut review = false;
+    for violation in &decision.violations {
+        if violation.rule == "advisory_coverage" || violation.rule == "new_dependencies" {
+            continue;
+        }
+        match violation.configured_action {
+            Action::Fail => fail = true,
+            Action::Review | Action::Warn => review = true,
+            Action::Allow => {}
+        }
+    }
+    if fail {
+        "fail"
+    } else if review {
+        "review"
+    } else {
+        "info"
+    }
+}
+
+fn severity_counts(cases: &[CaseResult]) -> SeverityCounts {
+    let mut counts = SeverityCounts {
+        fail: 0,
+        review: 0,
+        info: 0,
+    };
+    for case in cases {
+        match case.severity.as_str() {
+            "fail" => counts.fail += 1,
+            "review" => counts.review += 1,
+            _ => counts.info += 1,
+        }
+    }
+    counts
+}
+
 fn ratio(numerator: u32, denominator: u32) -> String {
     if denominator == 0 {
         return "n/a".to_owned();
@@ -728,6 +814,7 @@ mod tests {
         assert!(text.contains("False positives"));
         assert!(text.contains(SCOPE_NOTE));
         assert!(text.contains("FP-Rate nach Kohorte"));
+        assert!(text.contains("Fail vs. Review"));
     }
 
     #[test]
@@ -794,6 +881,24 @@ mod tests {
         assert!(!case("benign/esbuild").flagged);
         assert!(!case("benign/husky").flagged);
         assert!(!case("benign/chromedriver").flagged);
+        assert_eq!(report.confusion.tp, 15);
+        assert_eq!(report.confusion.fn_count, 1);
+        assert_eq!(report.confusion.fp, 2);
+        assert_eq!(report.confusion.tn, 54);
+        assert_eq!(report.metrics.recall, "0.9375");
+        assert_eq!(report.metrics.false_positive_rate, "0.0357");
+        assert_eq!(case("benign/edgedriver").severity, "review");
+        assert_eq!(case("benign/prisma").severity, "review");
+        assert_eq!(case("malicious/ua-parser-js-staged").severity, "fail");
+        assert_eq!(case("malicious/staged-binary").severity, "fail");
+        assert_eq!(case("malicious/obfuscated-hook").severity, "fail");
+        assert_eq!(case("malicious/crypto-stealer-secrets").severity, "fail");
+        assert_eq!(case("malicious/shell-out-hook").severity, "fail");
+        assert_eq!(case("malicious/event-stream-flag").severity, "review");
+        assert_eq!(case("malicious/node-ipc-protestware").severity, "info");
+        assert_eq!(report.severity.fail, 14);
+        assert_eq!(report.severity.review, 3);
+        assert_eq!(report.severity.info, 55);
         for cohort in [
             "trusted_build",
             "inspected_clean",
@@ -826,6 +931,36 @@ mod tests {
                 "{name} wurde auf die Downloader-Liste gesetzt"
             );
         }
+    }
+
+    #[test]
+    fn enforce_review_does_not_fail_the_build() {
+        use lockward_core::policy::Mode;
+        let policy = load_policy(&policy())
+            .expect("policy")
+            .with_mode(Mode::Enforce);
+        let offline = Offline;
+        let exit = |class: &str, name: &str| {
+            analyze(
+                &corpus().join(class).join(name),
+                &offline,
+                &AnalyzeOptions {
+                    offline: true,
+                    cache_dir: None,
+                    policy: policy.clone(),
+                    baseline: None,
+                },
+            )
+            .expect(name)
+            .decision
+            .exit_code
+        };
+        assert_eq!(exit("benign", "edgedriver"), 1);
+        assert_eq!(exit("benign", "prisma"), 1);
+        assert_eq!(exit("malicious", "ua-parser-js-staged"), 2);
+        assert_eq!(exit("malicious", "staged-binary"), 2);
+        assert_eq!(exit("malicious", "obfuscated-hook"), 2);
+        assert_eq!(exit("malicious", "eslint-scope-npmrc"), 2);
     }
 
     #[test]
