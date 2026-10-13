@@ -19,4 +19,4 @@ der/die Beitragende, Folgendem gegenüber **Deniz Yayvan** zu:
 5. **Keine Gewährleistung.** Beiträge werden "as is" bereitgestellt.
 
 Zustimmung erfolgt durch [Signatur in diesem Repo / CLA-Bot / E-Mail an
-wellerman101@gmail.com].
+deniz.yayvan@yadelabs.de].

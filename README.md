@@ -19,6 +19,7 @@ Built for teams that ship with lots of dependencies but have no dedicated AppSec
 - **SBOM** — **CycloneDX 1.6** output, schema-validated in CI.
 - **CI-native** — PR comment + step summary via a GitHub Action.
 - **Safe by design** — `#![forbid(unsafe_code)]`, path-contained reads, bounded inputs, no package-code execution.
+- **Local-first, zero telemetry** — no account, runs fully offline if you need it to; online it only queries the public OSV advisory database, never your code.
 
 ## Quick start
 
@@ -97,6 +98,28 @@ cosign verify-blob \
   SHA256SUMS
 ```
 
+## Detection quality
+
+Lockward publishes its detection numbers. On a 72-case corpus (16 malicious reconstructed from documented incidents, 56 benign including the hard native-build and downloader cases): **recall 94%, precision 88%, false-positive rate 3.6%**. The remaining false positives are legitimate packages that fetch a binary at install time — statically indistinguishable from a malicious staged downloader, so Lockward surfaces them as *review* rather than failing the build. Full method, results and limitations: [docs/BENCHMARK.md](docs/BENCHMARK.md).
+
+## Commercial use
+
+Lockward is free under the AGPL-3.0. You only need a **commercial license** if
+the AGPL's copyleft doesn't fit your use — for example embedding Lockward in a
+**closed-source** product, offering it as a **hosted service** without
+publishing your source, or working in an environment that **can't use AGPL**
+software.
+
+Lockward has **no telemetry and no account**, and can run **fully offline** so
+your dependency graph never leaves your network — a fit for teams and
+regulated / EU organizations that won't send their supply chain to a
+third-party cloud. (Online, it only queries the public OSV advisory database;
+it never uploads your code.) The licensor is EU-based (Germany).
+
+Commercial licenses are priced per organization and scale with use. For a
+quote: **deniz.yayvan@yadelabs.de** (subject "Lockward commercial license").
+Details: [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md).
+
 ## License
 
 Lockward is **dual-licensed**:
@@ -107,3 +130,9 @@ Lockward is **dual-licensed**:
 Rights holder: **Deniz Yayvan** (YaDe Labs), independent developer / Freiberufler. Contributions are accepted under `CONTRIBUTING.md` / `CLA.md` so dual-licensing stays possible.
 
 Build, layout, and the local quality gate: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
+
+## Maintainer
+
+Lockward is built and maintained by **Deniz Yayvan** ([YaDe Labs](https://yadelabs.de)),
+an independent software developer specializing in Rust, security tooling and
+CI/CD. Available for freelance and contract work — **deniz.yayvan@yadelabs.de**.

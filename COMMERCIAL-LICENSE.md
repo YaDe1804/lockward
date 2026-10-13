@@ -20,7 +20,18 @@ a commercial license is available from **Deniz Yayvan (YaDe Labs)**. It grants t
 right to use Lockward **without** the AGPL copyleft obligations, under
 separately agreed terms.
 
-**Contact:** wellerman101@gmail.com — subject "Lockward commercial license".
+**Contact:** deniz.yayvan@yadelabs.de — subject "Lockward commercial license".
+
+## 3. How licensing works
+
+Commercial licenses are priced **per organization**, on an annual basis, and
+scale with your team size and usage. Lockward has **no telemetry and no
+account**, and can run **fully offline** so your dependency data never leaves
+your network (in its default online mode it only queries the public **OSV**
+advisory database — it never uploads your source). The licensor is **EU-based
+(Germany)**.
+
+For a quote or any questions, get in touch — see the contact above.
 
 ---
 Copyright © 2026 Deniz Yayvan.
