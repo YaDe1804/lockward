@@ -2,9 +2,9 @@
 
 > Static supply-chain & backdoor-risk scanner for npm. Lockward flags risky install-hooks, known OSV advisories, and backdoor-like patterns in your dependencies — right in CI, **without running a single line of package code**.
 
-[![CI](https://github.com/YaDe1804/lockward/actions/workflows/ci.yml/badge.svg)](https://github.com/YaDe1804/lockward/actions/workflows/ci.yml)
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
-[![Mode 1: no code execution](https://img.shields.io/badge/Mode%201-no%20code%20execution-success.svg)](#how-it-works)
+![CI](https://github.com/YaDe1804/lockward/actions/workflows/ci.yml/badge.svg)
+![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)
+![Mode 1: no code execution](https://img.shields.io/badge/Mode%201-no%20code%20execution-success.svg)
 
 Lockward is a **developer-first supply-chain firewall** for npm projects. It reads your lockfile and `package.json` files, scores the risk, explains *why* something is risky in plain language, and gates your CI — so compromised dependencies and malicious `postinstall` scripts don't reach production. **Mode 1 is fully static: package code is never executed.**
 
@@ -20,23 +20,33 @@ Built for teams that ship with lots of dependencies but have no dedicated AppSec
 - **CI-native** — PR comment + step summary via a GitHub Action.
 - **Safe by design** — `#![forbid(unsafe_code)]`, path-contained reads, bounded inputs, no package-code execution.
 
+
+
 ## Quick start
 
+
+
 ### Build
+
 ```bash
 cargo build --release -p lockward-cli
 # binary: target/release/lockward
 ```
 
+
+
 ### Scan
+
 ```bash
 lockward scan .                                   # human-readable summary
 lockward scan . --format json --output report.json
 lockward scan . --format all --output ./out       # comment.md, summary.md, report.json, bom.cdx.json
 ```
+
 Exit codes: `0` clean · `1` warnings/review · `2` fail (enforce mode) or runtime error. Default mode is `warn`.
 
 ### In CI (GitHub Actions)
+
 ```yaml
 - uses: YaDe1804/lockward@v0.1.0   # available with the v0.1.0 release
   with:
@@ -44,9 +54,13 @@ Exit codes: `0` clean · `1` warnings/review · `2` fail (enforce mode) or runti
     mode: warn        # or "enforce"
     comment: "true"   # post findings as a PR comment
 ```
+
 > Until the Marketplace release, the composite action lives at `.github/actions/lockward`.
 
+
+
 ### What a finding looks like
+
 On a pull request, Lockward posts a comment and fails the check:
 
 ![Lockward PR comment](docs/pr-comment.png)
@@ -69,6 +83,7 @@ The EU **Cyber Resilience Act (CRA)** requires a machine-readable SBOM and forma
 lockward scan . --policy my-policy.yaml --mode enforce --baseline baseline.txt
 lockward baseline . -o baseline.txt          # snapshot current direct dependencies
 ```
+
 Default rules (warn-first): install-scripts allowlist, no outbound during build, new-dependency review, known-vulnerable (≥ high) → fail, secret-path access → fail, advisory-coverage → warn.
 
 ## Limits (hardened against untrusted input)
@@ -97,6 +112,12 @@ cosign verify-blob \
   SHA256SUMS
 ```
 
+
+
+Detection quality
+
+Lockward publishes its detection numbers. On a 72-case corpus (16 malicious reconstructed from documented incidents, 56 benign including the hard native-build and downloader cases): **recall 94%, precision 88%, false-positive rate 3.6%**. The remaining false positives are legitimate packages that fetch a binary at install time — statically indistinguishable from a malicious staged downloader, so Lockward surfaces them as *review* rather than failing the build. Full method, results and limitations: [docs/[BENCHMARK.md](http://BENCHMARK.md)](docs/[BENCHMARK.md](http://BENCHMARK.md)).
+
 ## License
 
 Lockward is **dual-licensed**:
@@ -106,4 +127,4 @@ Lockward is **dual-licensed**:
 
 Rights holder: **Deniz Yayvan** (YaDe Labs), independent developer / Freiberufler. Contributions are accepted under `CONTRIBUTING.md` / `CLA.md` so dual-licensing stays possible.
 
-Build, layout, and the local quality gate: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
+Build, layout, and the local quality gate: `[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)`.
