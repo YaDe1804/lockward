@@ -1,0 +1,5 @@
+expected: benign
+expected_rules: []
+cohort: inspected_clean
+source: "ci-info — lokales Install-Skript ohne Netzwerk, inerter Marker"
+notes: "Held-out: Datei wird gelesen und enthält kein Verdachtssignal."

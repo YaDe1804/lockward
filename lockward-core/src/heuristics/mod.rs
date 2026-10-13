@@ -246,6 +246,7 @@ mod tests {
             location: "package.json#scripts.postinstall".to_owned(),
             raw: raw.to_owned(),
             provenance: HookProvenance::Manifest,
+            disposition: crate::hooks::HookDisposition::Inspected,
         }
     }
 

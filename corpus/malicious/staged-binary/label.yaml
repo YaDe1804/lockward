@@ -1,4 +1,4 @@
 expected: malicious
-expected_rules: [install_scripts, no_outbound_build]
+expected_rules: [no_outbound_build]
 source: "Gestagter Binary-Downloader — rekonstruiertes Muster, inerter Payload"
-notes: "Das curl-Muster steht nur im Kommentar von install.js. Der Hook-Text nennt node install.js."
+notes: "Das curl-Muster steht im Kommentar von install.js. Lockward liest die Datei, führt sie nicht aus."

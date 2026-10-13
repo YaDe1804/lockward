@@ -1,4 +1,4 @@
 expected: benign
 expected_rules: []
-cohort: allowlisted_install
+cohort: inspected_clean
 source: "esbuild — legitimer Binary-Install, inerter Marker"

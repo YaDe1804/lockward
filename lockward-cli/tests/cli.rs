@@ -46,13 +46,13 @@ fn offline_corpus_exits_with_warning() {
 
 #[test]
 fn enforce_fail_policy_exits_2() {
-    let corpus = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../lockward-core/tests/fixtures/hooks/corpus");
+    let mini = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../lockward-core/tests/fixtures/report/mini");
     let policy = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fail-install.yaml");
     lockward()
         .args([
             "scan",
-            corpus.to_str().expect("utf-8 path"),
+            mini.to_str().expect("utf-8 path"),
             "--offline",
             "--policy",
             policy.to_str().expect("utf-8 path"),

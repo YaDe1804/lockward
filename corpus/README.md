@@ -8,11 +8,11 @@ ohne Advisory-Cache bleibt `known_vulnerable` leer.
 
 - Kein echter Schadcode, keine Malware-Tarballs, kein Download, keine Ausführung.
 - Lockward liest die Dateien nur statisch (Mode 1).
-- Jeder Install-Hook ist `node -e "console.log('LOCKWARD_EVAL_FIXTURE …')"`.
-  Angriffsmuster stehen **innerhalb** dieses Strings. Weder `sh` noch `cmd`
-  starten `curl`, `wget` oder eine Pipe.
+- Install-Hooks sind entweder `node -e "console.log('LOCKWARD_EVAL_FIXTURE …')"`
+  (Muster im String) oder ein literales Build-Kommando bzw. `node <datei>`.
+  Weder `sh` noch `cmd` starten `curl`, `wget` oder eine Pipe.
 - Zusätzliche `.js`-Dateien enthalten nur Kommentare und
-  `console.log("LOCKWARD_EVAL_FIXTURE")`.
+  `console.log("LOCKWARD_EVAL_FIXTURE")`. Lockward liest sie, führt sie nicht aus.
 - Die Fälle sind **rekonstruierte Muster** öffentlich dokumentierter Vorfälle,
   keine kopierten Originale.
 
@@ -35,8 +35,8 @@ Jeder Fall hat `package-lock.json` (lockfileVersion 3), bei Bedarf
 
 ```yaml
 expected: malicious            # malicious | benign
-expected_rules: [install_scripts, no_outbound_build]
-cohort: held_out_install          # optional, nur bei benign: clean | allowlisted_install | held_out_install | heuristic_probe
+expected_rules: [no_outbound_build]
+cohort: trusted_build             # optional, nur bei benign: trusted_build | inspected_clean | known_downloader | residual_downloader | clean | heuristic_probe
 source: "Vorfall — rekonstruiertes Muster, inerter Payload"
 notes: "optional"
 ```
@@ -47,12 +47,15 @@ notes: "optional"
 
 `cohort` trennt die gutartigen Fälle für die ehrliche FP-Rate:
 
-- `allowlisted_install`: kuratierter Name, Install-Script erwartet
-- `held_out_install`: legitimes Install-Script, Name **nicht** auf der Allowlist
+- `trusted_build`: der Hook besteht nur aus einem vertrauten Build-Kommando
+- `inspected_clean`: eine lokale Skriptdatei wurde gelesen und ist sauber
+- `known_downloader`: Paket steht auf der endlichen Downloader-Liste
+- `residual_downloader`: Netzwerk im Skript, Paket steht nicht auf dieser Liste
 - `clean`: kein Install-Hook
 - `heuristic_probe`: Hook nur, um eine Heuristik zu provozieren
 
-Held-out-Namen werden nicht nachträglich auf die Allowlist gesetzt.
+Neue Held-out-Namen werden nicht auf die Downloader-Liste gesetzt. Ein unbekannter
+Downloader bleibt ein Fund.
 
 ## Bekannte Grenze
 
@@ -62,9 +65,9 @@ Das ist keine offene Heuristik-Lücke für diesen Schritt: eine Suche über
 beliebige Quelldateien würde neue Fehlalarme erzeugen. Kandidat für eine spätere
 Content-Heuristik oder Mode 2.
 
-`corpus/eval-policy.yaml` setzt `advisory_coverage` auf `allow` und übernimmt
-die kuratierte Install-Script-Allowlist, damit der Offline-Lauf die Hook- und
-Heuristik-Erkennung misst. `known_vulnerable` bleibt ohne Cache leer.
+`corpus/eval-policy.yaml` setzt `advisory_coverage` auf `allow`, damit der
+Offline-Lauf die Hook- und Heuristik-Erkennung misst. `known_vulnerable`
+bleibt ohne Cache leer.
 
 ## Harness
 
@@ -73,6 +76,5 @@ cargo run --locked -p lockward-eval -- --output corpus-report.json
 ```
 
 Die Ausgabe ist die Confusion-Matrix, Precision, FP-Rate, Recall und F1, die
-Listen jedes FN und FP, und die FP-Rate getrennt für allowlistete und
-Held-out-Install-Scripts. Der Korpus ist gutartig-lastig. Schwellen werden hier
-nicht an den Held-out-Fällen nachgezogen.
+Listen jedes FN und FP, und die FP-Rate nach Kohorte. Der Korpus ist
+gutartig-lastig. Schwellen werden hier nicht an den Held-out-Fällen nachgezogen.

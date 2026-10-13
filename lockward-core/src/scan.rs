@@ -6,7 +6,7 @@ use crate::advisories::{AdvisoryCache, HttpTransport, OsvClient, package_queries
 use crate::heuristics::evaluate;
 use crate::hooks::detect_hooks;
 use crate::ingest::{Lockfile, parse_lockfile};
-use crate::policy::{Decision, Evaluation, Policy, decide};
+use crate::policy::{Decision, Evaluation, Policy, decide, known_downloader};
 use crate::resolve::{Graph, resolve};
 use crate::score::{ScoreReport, score};
 use crate::{Error, Result};
@@ -92,7 +92,10 @@ pub fn analyze<T: HttpTransport>(
     let lock = parse_lockfile(&lock_path)?;
     let graph = resolve(&lock);
     let hooks = detect_hooks(&lock, &project_root)?;
-    let heuristics = evaluate(&hooks.findings);
+    let mut heuristics = evaluate(&hooks.findings);
+    heuristics.retain(|finding| {
+        !(finding.rule_id == "LW-H003" && known_downloader(&finding.package_name))
+    });
     let mut client = OsvClient::new(transport).offline(options.offline);
     if let Some(cache_dir) = &options.cache_dir {
         client = client.with_cache(AdvisoryCache::new(cache_dir));

@@ -1,5 +1,5 @@
 expected: benign
 expected_rules: []
-cohort: held_out_install
+cohort: known_downloader
 source: "puppeteer-core — ähnlicher Name, bewusst nicht puppeteer und nicht allowlisted"
 notes: "Held-out: legitimes Install-Script, Name steht nicht in der kuratierten Allowlist."

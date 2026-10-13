@@ -1,4 +1,4 @@
 expected: malicious
-expected_rules: [install_scripts, no_outbound_build]
+expected_rules: [no_outbound_build]
 source: "ua-parser-js 2021 (Downloader in build.js) — rekonstruiertes Muster, inerter Payload"
-notes: "Grenzfall der Sichtbarkeit: das curl-Muster steht nur im Kommentar von build.js. Der Hook-Text nennt node build.js und führt die Datei nicht aus."
+notes: "Das curl-Muster steht im Kommentar von build.js. Lockward liest die Datei, führt sie nicht aus."

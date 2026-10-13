@@ -1,0 +1,5 @@
+expected: benign
+expected_rules: []
+cohort: trusted_build
+source: "iconv — natives Rebuild-Kommando, Name nicht gelistet"
+notes: "Held-out: vertrautes Build-Kommando, nicht über den Paketnamen freigegeben."

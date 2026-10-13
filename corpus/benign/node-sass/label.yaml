@@ -1,4 +1,4 @@
 expected: benign
 expected_rules: []
-cohort: allowlisted_install
+cohort: known_downloader
 source: "node-sass — legitimer nativer Build, inerter Marker"

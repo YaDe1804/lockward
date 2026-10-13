@@ -20,7 +20,7 @@ const DEFAULT_YAML: &str = include_str!("default-policy.yaml");
 
 mod install_allowlist;
 
-pub use install_allowlist::{INSTALL_ALLOWLIST, binary_fetch, curated};
+pub use install_allowlist::{KNOWN_DOWNLOADERS, known_downloader};
 
 /// How the gate treats configured fail and review actions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -244,7 +244,13 @@ pub fn render_baseline(graph: &Graph) -> String {
 pub fn decide(policy: &Policy, input: Evaluation<'_>) -> Decision {
     let mut violations = Vec::new();
     let mut notes = Vec::new();
-    consider_install_scripts(policy, input.hooks, input.heuristics, &mut violations);
+    consider_install_scripts(
+        policy,
+        input.hooks,
+        input.heuristics,
+        &mut violations,
+        &mut notes,
+    );
     consider_outbound(policy, input.heuristics, &mut violations);
     consider_new_dependencies(
         policy,
@@ -266,6 +272,7 @@ pub fn decide(policy: &Policy, input: Evaluation<'_>) -> Decision {
             .then(left.package_version.cmp(&right.package_version))
             .then(left.message.cmp(&right.message))
     });
+    notes.sort();
     let exit_code = exit_code(policy.mode, &violations);
     Decision {
         mode: policy.mode,
@@ -281,51 +288,59 @@ fn consider_install_scripts(
     hooks: &[HookFinding],
     heuristics: &[HeuristicFinding],
     violations: &mut Vec<Violation>,
+    notes: &mut Vec<String>,
 ) {
     let rule = &policy.rules.install_scripts;
     if rule.action == Action::Allow {
         return;
     }
     for hook in hooks {
-        if rule.allow.iter().any(|name| name == &hook.package_name) {
+        if known_downloader(&hook.package_name) {
+            notes.push(format!(
+                "Install-Hook `{}` in {}@{} gehört zu einem bekannten Binary-Downloader; Netzwerk dabei ist erwartet.",
+                hook.hook, hook.package_name, hook.package_version
+            ));
+        }
+        let signals = heuristics.iter().any(|finding| {
+            finding.package_name == hook.package_name
+                && !(finding.rule_id == "LW-H003" && known_downloader(&finding.package_name))
+        });
+        if signals || rule.allow.iter().any(|name| name == &hook.package_name) {
             continue;
         }
-        let corroborated = heuristics
-            .iter()
-            .any(|finding| finding.package_name == hook.package_name);
-        let configured_action =
-            if corroborated && matches!(rule.action, Action::Warn | Action::Review) {
-                Action::Fail
-            } else {
-                rule.action
-            };
-        violations.push(Violation {
-            rule: "install_scripts",
-            package_name: hook.package_name.clone(),
-            package_version: hook.package_version.clone(),
-            configured_action,
-            effective_action: configured_action,
-            message: format!(
-                "Install-Hook `{}` in {}@{} ist nicht auf der Allowlist.",
+        if known_downloader(&hook.package_name) {
+            continue;
+        }
+        match hook.disposition {
+            crate::hooks::HookDisposition::TrustedBuild => notes.push(format!(
+                "Install-Hook `{}` in {}@{} ist ein vertrautes Build-Kommando.",
                 hook.hook, hook.package_name, hook.package_version
-            ),
-        });
+            )),
+            crate::hooks::HookDisposition::Inspected => notes.push(format!(
+                "Install-Hook `{}` in {}@{} enthält kein Verdachtssignal.",
+                hook.hook, hook.package_name, hook.package_version
+            )),
+            crate::hooks::HookDisposition::Unverified | crate::hooks::HookDisposition::FlagOnly => {
+                violations.push(Violation {
+                    rule: "install_scripts",
+                    package_name: hook.package_name.clone(),
+                    package_version: hook.package_version.clone(),
+                    configured_action: Action::Review,
+                    effective_action: Action::Review,
+                    message: format!(
+                        "Install-Hook `{}` in {}@{} verweist auf ein nicht lesbares Ziel und braucht ein Review.",
+                        hook.hook, hook.package_name, hook.package_version
+                    ),
+                });
+            }
+        }
     }
 }
 
-/// `LW-H003` on this package is the expected binary download.
-///
-/// True only when the loaded policy allowlists the name and the curated entry
-/// marks it as a binary fetcher. Pipe-to-shell (`LW-H004`) stays a violation.
+/// `LW-H003` on a known binary downloader is expected. `LW-H004` is not.
 #[must_use]
-pub fn expected_binary_fetch(policy: &Policy, package: &str) -> bool {
-    policy
-        .rules
-        .install_scripts
-        .allow
-        .iter()
-        .any(|name| name == package)
-        && binary_fetch(package)
+pub fn expected_binary_fetch(package: &str) -> bool {
+    known_downloader(package)
 }
 
 fn consider_outbound(
@@ -341,7 +356,7 @@ fn consider_outbound(
         if finding.rule_id != "LW-H003" && finding.rule_id != "LW-H004" {
             continue;
         }
-        if finding.rule_id == "LW-H003" && expected_binary_fetch(policy, &finding.package_name) {
+        if finding.rule_id == "LW-H003" && known_downloader(&finding.package_name) {
             continue;
         }
         if domain_allowed(&finding.evidence, &rule.allow_domains) {
@@ -578,6 +593,7 @@ mod tests {
             location: "package.json#scripts.postinstall".to_owned(),
             raw: raw.to_owned(),
             provenance: HookProvenance::Manifest,
+            disposition: crate::hooks::HookDisposition::Unverified,
         }
     }
 
@@ -616,13 +632,11 @@ mod tests {
         assert_eq!(policy.rules.no_outbound_build.action, Action::Fail);
         assert_eq!(policy.rules.known_vulnerable.min_severity, Severity::High);
         assert_eq!(policy.rules.advisory_coverage.action, Action::Warn);
-        let mut allow = policy.rules.install_scripts.allow.clone();
-        allow.sort();
-        let curated: Vec<_> = INSTALL_ALLOWLIST
-            .iter()
-            .map(|entry| entry.name.to_owned())
-            .collect();
-        assert_eq!(allow, curated);
+        assert!(policy.rules.install_scripts.allow.is_empty());
+        assert!(known_downloader("puppeteer"));
+        assert!(known_downloader("puppeteer-core"));
+        assert!(!known_downloader("esbuild"));
+        assert!(!known_downloader("edgedriver"));
     }
 
     #[test]
@@ -758,7 +772,7 @@ mod tests {
             decision
                 .violations
                 .iter()
-                .any(|item| item.rule == "install_scripts")
+                .all(|item| item.rule != "install_scripts")
         );
     }
 
@@ -850,7 +864,8 @@ mod tests {
     #[test]
     fn unknown_install_script_is_review_until_a_second_signal() {
         let policy = Policy::default_policy().unwrap().with_mode(Mode::Enforce);
-        let plain = hook("held-out-addon", "node-gyp rebuild");
+        let mut plain = hook("held-out-addon", "node-gyp rebuild");
+        plain.disposition = crate::hooks::HookDisposition::TrustedBuild;
         let plain_decision = decide(
             &policy,
             Evaluation {
@@ -861,9 +876,24 @@ mod tests {
                 baseline: None,
             },
         );
-        assert_eq!(plain_decision.exit_code, 1);
+        assert_eq!(plain_decision.exit_code, 0);
+        assert!(plain_decision.violations.is_empty());
+
+        let mut missing = hook("held-out-addon", "node build.js");
+        missing.disposition = crate::hooks::HookDisposition::Unverified;
+        let missing_decision = decide(
+            &policy,
+            Evaluation {
+                graph: &graph(),
+                hooks: std::slice::from_ref(&missing),
+                heuristics: &[],
+                advisories: &empty_advisories(),
+                baseline: None,
+            },
+        );
+        assert_eq!(missing_decision.exit_code, 1);
         assert_eq!(
-            plain_decision.violations[0].configured_action,
+            missing_decision.violations[0].configured_action,
             Action::Review
         );
 
@@ -883,15 +913,25 @@ mod tests {
             },
         );
         assert_eq!(hostile_decision.exit_code, 2);
-        assert!(hostile_decision.violations.iter().any(|item| {
-            item.rule == "install_scripts" && item.configured_action == Action::Fail
-        }));
+        assert!(
+            hostile_decision
+                .violations
+                .iter()
+                .any(|item| item.rule == "no_outbound_build")
+        );
+        assert!(
+            hostile_decision
+                .violations
+                .iter()
+                .all(|item| item.rule != "install_scripts")
+        );
     }
 
     #[test]
     fn curated_allowlist_suppresses_install_scripts_and_binary_fetch() {
         let policy = Policy::default_policy().unwrap().with_mode(Mode::Enforce);
-        let native = hook("node-gyp", "node-gyp rebuild");
+        let mut native = hook("node-gyp", "node-gyp rebuild");
+        native.disposition = crate::hooks::HookDisposition::TrustedBuild;
         let native_hits = evaluate(std::slice::from_ref(&native));
         let native_decision = decide(
             &policy,
@@ -947,11 +987,11 @@ mod tests {
                 item.rule == "no_outbound_build" && item.message.contains("LW-H004")
             })
         );
-        assert!(
-            !expected_binary_fetch(&policy, "puppeteer-core"),
-            "prefix of an allowlisted name is not an entry"
-        );
-        assert!(curated("esbudld").is_none());
+        assert!(curated_downloader_does_not_match_prefix());
+    }
+
+    fn curated_downloader_does_not_match_prefix() -> bool {
+        !known_downloader("puppeteer-extra") && known_downloader("puppeteer-core")
     }
 
     #[test]
