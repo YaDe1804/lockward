@@ -1,0 +1,4 @@
+expected: benign
+expected_rules: []
+source: "puppeteer — legitimer Browser-Download im Install-Text, URL example.invalid, nichts wird geholt"
+notes: "Harter FP-Kandidat: der Hook-Text enthält https.get, ausgeführt wird nur console.log."

@@ -1,0 +1,3 @@
+expected: benign
+expected_rules: []
+source: "typescript ohne Install-Hook — bereinigter Lockfile-Ausschnitt"

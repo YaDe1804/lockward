@@ -1,0 +1,3 @@
+expected: malicious
+expected_rules: [install_scripts, secret_path_access, LW-H006]
+source: "Secret-Pfade im Install-Hook — rekonstruiertes Muster, inerter Payload"

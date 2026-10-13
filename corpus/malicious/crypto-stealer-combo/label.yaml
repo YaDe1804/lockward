@@ -1,0 +1,3 @@
+expected: malicious
+expected_rules: [install_scripts, no_outbound_build, secret_path_access, LW-H001, LW-H002]
+source: "Postinstall-Stealer (Obfuskation, Download, Secret-Pfade) — rekonstruiertes Muster, inerter Payload"

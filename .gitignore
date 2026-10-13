@@ -9,3 +9,4 @@
 *.docx
 
 out/
+corpus-report.json

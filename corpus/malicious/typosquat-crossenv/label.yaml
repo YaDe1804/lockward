@@ -1,0 +1,3 @@
+expected: malicious
+expected_rules: [install_scripts, no_outbound_build]
+source: "crossenv 2017 (Typosquat von cross-env) — rekonstruiertes Muster, inerter Payload"
