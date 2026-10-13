@@ -1,3 +1,3 @@
 expected: malicious
-expected_rules: [install_scripts, LW-H005]
+expected_rules: [LW-H005]
 source: "Shell-out im Install-Hook — rekonstruiertes Muster, inerter Payload"

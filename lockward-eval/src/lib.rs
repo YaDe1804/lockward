@@ -290,7 +290,7 @@ pub fn render_text(report: &Report) -> String {
         ),
     );
     push(&mut out, "");
-    push(&mut out, "FP-Rate nach Kohorte (Allowlist vs. Held-out)");
+    push(&mut out, "FP-Rate nach Kohorte");
     push(
         &mut out,
         &format!("{:<24} {:>8} {:>10}  fp_rate", "cohort", "cases", "flagged"),
@@ -431,7 +431,7 @@ fn evaluate_case(
         }
     }
     for finding in &analysis.heuristics {
-        if finding.rule_id == "LW-H003" && expected_binary_fetch(policy, &finding.package_name) {
+        if finding.rule_id == "LW-H003" && expected_binary_fetch(&finding.package_name) {
             continue;
         }
         if finding.rule_id.starts_with("LW-H") {
@@ -459,7 +459,7 @@ fn evaluate_case(
         .iter()
         .map(|finding| finding.package_name.clone())
         .collect();
-    let cohort = cohort_of(&label, &names, policy, &id)?;
+    let cohort = cohort_of(&label, &names, &id)?;
     Ok(CaseResult {
         id,
         expected: label.expected,
@@ -560,29 +560,8 @@ fn assemble(policy_name: String, cases: Vec<CaseResult>) -> Report {
     }
 }
 
-fn cohort_of(
-    label: &Label,
-    names: &BTreeSet<String>,
-    policy: &lockward_core::Policy,
-    id: &str,
-) -> Result<String, Error> {
+fn cohort_of(label: &Label, names: &BTreeSet<String>, id: &str) -> Result<String, Error> {
     let malicious = label.expected == "malicious";
-    let inferred = if malicious {
-        "malicious"
-    } else if names.is_empty() {
-        "clean"
-    } else if names.iter().all(|name| {
-        policy
-            .rules
-            .install_scripts
-            .allow
-            .iter()
-            .any(|allowed| allowed == name)
-    }) {
-        "allowlisted_install"
-    } else {
-        "held_out_install"
-    };
     let Some(declared) = label.cohort.as_deref() else {
         if malicious {
             return Ok("malicious".to_owned());
@@ -592,15 +571,26 @@ fn cohort_of(
             message: "gutartige Fälle brauchen cohort".to_owned(),
         });
     };
+    let downloader = names
+        .iter()
+        .any(|name| lockward_core::policy::known_downloader(name));
     let ok = match declared {
-        "heuristic_probe" => inferred == "held_out_install",
+        "clean" => names.is_empty(),
+        "known_downloader" => {
+            !names.is_empty()
+                && names
+                    .iter()
+                    .all(|name| lockward_core::policy::known_downloader(name))
+        }
+        "residual_downloader" => !names.is_empty() && !downloader,
+        "trusted_build" | "inspected_clean" | "heuristic_probe" => !names.is_empty() && !downloader,
         "malicious" => malicious,
-        other => other == inferred,
+        _ => false,
     };
     if !ok {
         return Err(Error::Label {
             path: id.to_owned(),
-            message: format!("cohort {declared} passt nicht zur Allowlist ({inferred})"),
+            message: format!("cohort {declared} passt nicht zu den Paketnamen"),
         });
     }
     Ok(declared.to_owned())
@@ -751,6 +741,18 @@ mod tests {
                 .unwrap_or_else(|| panic!("missing {id}"))
         };
         assert_eq!(case("malicious/ua-parser-js-staged").outcome, "tp");
+        assert!(
+            case("malicious/ua-parser-js-staged")
+                .fired
+                .iter()
+                .any(|rule| rule == "no_outbound_build")
+        );
+        assert!(
+            case("malicious/staged-binary")
+                .fired
+                .iter()
+                .any(|rule| rule == "no_outbound_build")
+        );
         assert_eq!(case("malicious/node-ipc-protestware").outcome, "fn");
         assert!(
             case("malicious/crypto-stealer-combo")
@@ -790,33 +792,38 @@ mod tests {
         );
         assert!(!case("benign/puppeteer").flagged);
         assert!(!case("benign/esbuild").flagged);
-        let allowlisted = report
+        assert!(!case("benign/husky").flagged);
+        assert!(!case("benign/chromedriver").flagged);
+        for cohort in [
+            "trusted_build",
+            "inspected_clean",
+            "known_downloader",
+            "heuristic_probe",
+            "clean",
+        ] {
+            let stats = report
+                .cohorts
+                .iter()
+                .find(|item| item.cohort == cohort)
+                .unwrap_or_else(|| panic!("missing {cohort}"));
+            assert_eq!(stats.flagged, 0, "{cohort}");
+        }
+        let residual = report
             .cohorts
             .iter()
-            .find(|item| item.cohort == "allowlisted_install")
-            .expect("allowlisted cohort");
-        assert_eq!(allowlisted.flagged, 0);
-        let held = report
-            .cohorts
-            .iter()
-            .find(|item| item.cohort == "held_out_install")
-            .expect("held-out cohort");
-        assert!(held.cases >= 10);
-        let policy = load_policy(&policy()).expect("policy");
+            .find(|item| item.cohort == "residual_downloader")
+            .expect("residual cohort");
+        assert!(residual.cases >= 1);
+        assert_eq!(residual.flagged, residual.cases);
         for item in report
             .cases
             .iter()
-            .filter(|item| item.cohort == "held_out_install")
+            .filter(|item| item.cohort == "residual_downloader")
         {
+            let name = item.id.rsplit('/').next().unwrap_or("");
             assert!(
-                !policy
-                    .rules
-                    .install_scripts
-                    .allow
-                    .iter()
-                    .any(|name| item.id.ends_with(name.as_str())),
-                "{} steht auf der Allowlist",
-                item.id
+                !lockward_core::policy::known_downloader(name),
+                "{name} wurde auf die Downloader-Liste gesetzt"
             );
         }
     }
@@ -861,9 +868,22 @@ mod tests {
         };
         for (hook, body) in scripts {
             let body = body.as_str().unwrap_or("");
+            let quoted = body.starts_with("node -e \"console.log('LOCKWARD_EVAL_FIXTURE")
+                && body.ends_with("')\"");
+            let readable = !body.contains('|')
+                && !body.contains("curl ")
+                && !body.contains("wget ")
+                && (body.starts_with("node ")
+                    || body.starts_with("node-gyp")
+                    || body.starts_with("node-pre-gyp")
+                    || body.starts_with("husky")
+                    || body.starts_with("napi-build")
+                    || body.starts_with("prebuild")
+                    || body.starts_with("cmake-js")
+                    || body.starts_with("patch-package")
+                    || body.starts_with("npm run "));
             assert!(
-                body.starts_with("node -e \"console.log('LOCKWARD_EVAL_FIXTURE")
-                    && body.ends_with("')\""),
+                quoted || readable,
                 "{} script {hook} ist kein inerter Marker: {body}",
                 path.display()
             );

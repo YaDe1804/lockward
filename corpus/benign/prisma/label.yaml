@@ -1,0 +1,5 @@
+expected: benign
+expected_rules: []
+cohort: residual_downloader
+source: "prisma — legitimer Engine-Download, nicht auf der Downloader-Liste"
+notes: "Residual: Netzwerk im gelesenen Skript, Paket ist kein bekannter Downloader."

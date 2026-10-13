@@ -3,30 +3,7 @@ mode: warn
 rules:
   install_scripts:
     action: review
-    allow:
-      - "@grpc/grpc-js"
-      - "@mapbox/node-pre-gyp"
-      - "@swc/core"
-      - bcrypt
-      - better-sqlite3
-      - canvas
-      - core-js
-      - cypress
-      - electron
-      - esbuild
-      - fsevents
-      - grpc
-      - node-gyp
-      - node-pre-gyp
-      - node-sass
-      - playwright
-      - prebuild-install
-      - puppeteer
-      - re2
-      - sass
-      - sharp
-      - sodium-native
-      - sqlite3
+    allow: []
   no_outbound_build:
     action: fail
     allow_domains: []

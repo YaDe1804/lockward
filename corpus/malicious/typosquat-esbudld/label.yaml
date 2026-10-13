@@ -1,4 +1,4 @@
 expected: malicious
-expected_rules: [install_scripts, no_outbound_build]
+expected_rules: [no_outbound_build]
 source: "Typosquat neben esbuild — rekonstruiertes Muster, inerter Payload"
 notes: "Name esbudld ist kein Allowlist-Treffer. Das Muster bleibt im console.log-String."

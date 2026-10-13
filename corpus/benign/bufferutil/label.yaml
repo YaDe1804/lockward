@@ -1,5 +1,5 @@
 expected: benign
 expected_rules: []
-cohort: held_out_install
+cohort: trusted_build
 source: "bufferutil — legitimer nativer Rebuild, nicht auf der Allowlist"
 notes: "Held-out: legitimes Install-Script, Name steht nicht in der kuratierten Allowlist."

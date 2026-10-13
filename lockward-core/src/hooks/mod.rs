@@ -19,8 +19,27 @@ pub const NPM_INSTALL_HOOKS: &[&str] = &["preinstall", "install", "postinstall"]
 /// Maximum number of characters kept from a hook body.
 pub const MAX_HOOK_CHARS: usize = 8_192;
 
-/// Largest `package.json` that will be read (1 MiB). Bigger manifests are skipped.
+/// Largest `package.json` or referenced script that will be read (1 MiB).
 pub const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
+
+/// Referenced scripts read per hook. Further references stay unverified.
+pub const MAX_REFERENCED_SCRIPTS: usize = 8;
+
+mod command;
+
+/// How the hook body was classified. Nothing here is executed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HookDisposition {
+    /// Every command is a known build tool (`node-gyp`, `husky`, …).
+    TrustedBuild,
+    /// The command line and any referenced local files were read.
+    Inspected,
+    /// A referenced file could not be read inside the package directory.
+    Unverified,
+    /// Lockfile `hasInstallScript` without a manifest body.
+    FlagOnly,
+}
 
 /// Where a hook finding came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -45,10 +64,13 @@ pub struct HookFinding {
     pub hook: String,
     /// File location, with the script key when the body was read.
     pub location: String,
-    /// Script source, truncated to [`MAX_HOOK_CHARS`]. Empty for a lockfile flag.
+    /// Script source, including directly referenced local files. Truncated per
+    /// chunk to [`MAX_HOOK_CHARS`]. Empty for a lockfile flag.
     pub raw: String,
     /// How the finding was produced.
     pub provenance: HookProvenance,
+    /// Whether the body was a build tool, a read script, or unverifiable.
+    pub disposition: HookDisposition,
 }
 
 /// Hook scan output. Invalid manifests are warnings, not scan failures.
@@ -108,6 +130,7 @@ pub fn detect_hooks(lock: &Lockfile, project_root: &Path) -> Result<HookReport> 
                     &package.version,
                     &package.path,
                     &manifest_path,
+                    &canonical_root,
                     &value,
                     &mut warnings,
                 );
@@ -130,12 +153,14 @@ fn hooks_from_manifest(
     version: &str,
     package_path: &str,
     manifest_path: &Path,
+    canonical_root: &Path,
     manifest: &Value,
     warnings: &mut Vec<String>,
 ) -> Vec<HookFinding> {
     let Some(scripts) = manifest.get("scripts").and_then(Value::as_object) else {
         return Vec::new();
     };
+    let package_dir = manifest_path.parent().unwrap_or(manifest_path);
     let mut found = Vec::new();
     for hook in NPM_INSTALL_HOOKS {
         let Some(value) = scripts.get(*hook) else {
@@ -155,6 +180,10 @@ fn hooks_from_manifest(
                 manifest_path.display()
             ));
         }
+        let (disposition, extra) =
+            command::resolve_body(&raw, manifest, package_dir, canonical_root, warnings);
+        let mut raw = raw;
+        raw.push_str(&extra);
         found.push(HookFinding {
             package_name: name.to_owned(),
             package_version: version.to_owned(),
@@ -163,6 +192,7 @@ fn hooks_from_manifest(
             location: format!("{}#scripts.{hook}", manifest_path.display()),
             raw,
             provenance: HookProvenance::Manifest,
+            disposition,
         });
     }
     found
@@ -227,6 +257,7 @@ fn lockfile_flag(package: &crate::ingest::Package) -> HookFinding {
         ),
         raw: String::new(),
         provenance: HookProvenance::LockfileFlag,
+        disposition: HookDisposition::FlagOnly,
     }
 }
 

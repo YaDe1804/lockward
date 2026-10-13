@@ -1,4 +1,4 @@
 expected: benign
 expected_rules: []
-cohort: allowlisted_install
+cohort: trusted_build
 source: "node-gyp — legitimer nativer Rebuild, inerter Marker"
