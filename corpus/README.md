@@ -9,9 +9,11 @@ ohne Advisory-Cache bleibt `known_vulnerable` leer.
 - Kein echter Schadcode, keine Malware-Tarballs, kein Download, keine Ausführung.
 - Lockward liest die Dateien nur statisch (Mode 1).
 - Install-Hooks sind entweder `node -e "console.log('LOCKWARD_EVAL_FIXTURE …')"`
-  (Muster im String) oder ein literales Build-Kommando bzw. `node <datei>`.
-  Weder `sh` noch `cmd` starten `curl`, `wget` oder eine Pipe.
-- Zusätzliche `.js`-Dateien enthalten nur Kommentare und
+  (Muster im String), ein literales Build-Kommando, `node <datei>`,
+  `node --require <datei> <datei>`, `./<datei>`, `sh -c 'node <datei>'`
+  oder `bun <datei>`. Der Hook-String selbst enthält kein `curl`, kein `wget`
+  und keine Pipe.
+- Zusätzliche Dateien enthalten nur Kommentare (`//` oder `#`) und
   `console.log("LOCKWARD_EVAL_FIXTURE")`. Lockward liest sie, führt sie nicht aus.
 - Die Fälle sind **rekonstruierte Muster** öffentlich dokumentierter Vorfälle,
   keine kopierten Originale.

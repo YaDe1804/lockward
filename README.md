@@ -100,7 +100,7 @@ cosign verify-blob \
 
 ## Detection quality
 
-Lockward publishes its detection numbers. On a 72-case corpus (16 malicious reconstructed from documented incidents, 56 benign including the hard native-build and downloader cases): **recall 94%, precision 88%, false-positive rate 3.6%**. The remaining false positives are legitimate packages that fetch a binary at install time — statically indistinguishable from a malicious staged downloader, so Lockward surfaces them as *review* rather than failing the build. Full method, results and limitations: [docs/BENCHMARK.md](docs/BENCHMARK.md).
+Lockward publishes its detection numbers. On a 76-case corpus (20 malicious reconstructed from documented incidents, 56 benign including the hard native-build and downloader cases): **recall 95%, precision 90%, false-positive rate 3.6%**. The remaining false positives are legitimate packages that fetch a binary at install time — statically indistinguishable from a malicious staged downloader, so Lockward surfaces them as *review* rather than failing the build. Full method, results and limitations: [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
 ## Commercial use
 

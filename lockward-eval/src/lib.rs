@@ -881,22 +881,28 @@ mod tests {
         assert!(!case("benign/esbuild").flagged);
         assert!(!case("benign/husky").flagged);
         assert!(!case("benign/chromedriver").flagged);
-        assert_eq!(report.confusion.tp, 15);
+        assert_eq!(report.confusion.tp, 19);
         assert_eq!(report.confusion.fn_count, 1);
         assert_eq!(report.confusion.fp, 2);
         assert_eq!(report.confusion.tn, 54);
-        assert_eq!(report.metrics.recall, "0.9375");
+        assert_eq!(report.metrics.precision, "0.9048");
+        assert_eq!(report.metrics.recall, "0.9500");
+        assert_eq!(report.metrics.f1, "0.9268");
         assert_eq!(report.metrics.false_positive_rate, "0.0357");
         assert_eq!(case("benign/edgedriver").severity, "review");
         assert_eq!(case("benign/prisma").severity, "review");
         assert_eq!(case("malicious/ua-parser-js-staged").severity, "fail");
         assert_eq!(case("malicious/staged-binary").severity, "fail");
+        assert_eq!(case("malicious/path-form-husky").severity, "fail");
+        assert_eq!(case("malicious/node-require-preload").severity, "fail");
+        assert_eq!(case("malicious/shell-c-node").severity, "fail");
+        assert_eq!(case("malicious/bun-entry").severity, "fail");
         assert_eq!(case("malicious/obfuscated-hook").severity, "fail");
         assert_eq!(case("malicious/crypto-stealer-secrets").severity, "fail");
         assert_eq!(case("malicious/shell-out-hook").severity, "fail");
         assert_eq!(case("malicious/event-stream-flag").severity, "review");
         assert_eq!(case("malicious/node-ipc-protestware").severity, "info");
-        assert_eq!(report.severity.fail, 14);
+        assert_eq!(report.severity.fail, 18);
         assert_eq!(report.severity.review, 3);
         assert_eq!(report.severity.info, 55);
         for cohort in [
@@ -985,14 +991,16 @@ mod tests {
             let text = fs::read_to_string(&path).expect("utf-8 fixture");
             if name == "package.json" {
                 assert_scripts_inert(&path, &text);
+                continue;
             }
-            if name.ends_with(".js") {
-                assert!(
-                    text.lines().all(inert_js_line),
-                    "{} enthält ausführbaren Code",
-                    path.display()
-                );
+            if name == "package-lock.json" || name == "label.yaml" {
+                continue;
             }
+            assert!(
+                text.lines().all(inert_payload_line),
+                "{} enthält ausführbaren Code",
+                path.display()
+            );
         }
     }
 
@@ -1016,7 +1024,10 @@ mod tests {
                     || body.starts_with("prebuild")
                     || body.starts_with("cmake-js")
                     || body.starts_with("patch-package")
-                    || body.starts_with("npm run "));
+                    || body.starts_with("npm run ")
+                    || body.starts_with("./")
+                    || body.starts_with("sh -c ")
+                    || body.starts_with("bun "));
             assert!(
                 quoted || readable,
                 "{} script {hook} ist kein inerter Marker: {body}",
@@ -1025,10 +1036,11 @@ mod tests {
         }
     }
 
-    fn inert_js_line(line: &str) -> bool {
+    fn inert_payload_line(line: &str) -> bool {
         let trimmed = line.trim();
         trimmed.is_empty()
             || trimmed.starts_with("//")
+            || trimmed.starts_with('#')
             || trimmed == "console.log(\"LOCKWARD_EVAL_FIXTURE\");"
     }
 }

@@ -1,0 +1,4 @@
+expected: malicious
+expected_rules: [no_outbound_build]
+source: "Nested shell install hook — reconstructed pattern, inert payload"
+notes: "postinstall is sh -c 'node install.js'. The curl pattern is a comment in install.js. Lockward reads it and does not execute it."

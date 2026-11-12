@@ -7,7 +7,7 @@ numbers, including the uncomfortable ones.
 
 ## Method
 
-- **Corpus:** 72 cases under [`corpus/`](../corpus) — 16 malicious, 56 benign.
+- **Corpus:** 76 cases under [`corpus/`](../corpus) — 20 malicious, 56 benign.
   - **Malicious** cases are *patterns reconstructed* from publicly documented npm
     supply-chain incidents (event-stream, ua-parser-js, crossenv-style
     typosquats, eslint-scope, node-ipc, staged `postinstall` downloaders).
@@ -26,18 +26,18 @@ numbers, including the uncomfortable ones.
 
 ## Results
 
-Confusion matrix (corpus of 72):
+Confusion matrix (corpus of 76):
 
 |                 | flagged | not flagged |
 |-----------------|--------:|------------:|
-| malicious (16)  | TP 15   | FN 1        |
+| malicious (20)  | TP 19   | FN 1        |
 | benign (56)     | FP 2    | TN 54       |
 
 | Metric    | Value |
 |-----------|------:|
-| Recall    | 0.94  |
-| Precision | 0.88  |
-| F1        | 0.91  |
+| Recall    | 0.95  |
+| Precision | 0.90  |
+| F1        | 0.93  |
 | FP-rate   | 0.036 |
 
 False-positive rate by cohort:
