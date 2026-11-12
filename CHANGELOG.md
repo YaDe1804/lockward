@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Updated `rustls` to 0.23.46, `rustls-webpki` to 0.103.16,
+  `webpki-root-certs` to 1.0.12, and `tokio` to 1.54.1
+  (RUSTSEC-2026-0346, RUSTSEC-2026-0347, RUSTSEC-2026-0348,
+  RUSTSEC-2026-0349, RUSTSEC-2026-0382, RUSTSEC-2026-0383,
+  RUSTSEC-2026-0386).
+
 ### Added
 
 - Offline corpus and `lockward-eval` measure hook and heuristic detection.
