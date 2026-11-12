@@ -272,6 +272,7 @@ mod tests {
             dev_dependencies: BTreeMap::new(),
             optional_dependencies: BTreeMap::new(),
             peer_dependencies: BTreeMap::new(),
+            bins: BTreeMap::new(),
         }
     }
 

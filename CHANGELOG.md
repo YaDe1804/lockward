@@ -39,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   directly. A write failure is a report note. The scan result stays valid.
 - A release tag that is not `v` plus the workspace version stops the release
   workflow before the build.
+- A package that declares a trusted build command's `bin` name, and is not
+  that command's publisher, is reported as `bin_shadow`. Hooks that call the
+  bare name are `unverified` in that project.
 
 ### Changed
 

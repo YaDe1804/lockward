@@ -8,7 +8,7 @@
 
 use crate::advisories::{AdvisoryReport, Severity};
 use crate::heuristics::HeuristicFinding;
-use crate::hooks::HookFinding;
+use crate::hooks::{BinShadow, HookFinding, publishers_for};
 use crate::resolve::Graph;
 use crate::{Error, Result};
 use noyalib::from_str;
@@ -87,6 +87,15 @@ pub struct PolicyRules {
     /// Offline scans with cache misses are not treated as a clean vulnerability check.
     #[serde(default = "default_advisory_coverage")]
     pub advisory_coverage: ActionRule,
+    /// A package declares a trusted build command's bin name without being its publisher.
+    #[serde(default = "default_bin_shadow")]
+    pub bin_shadow: ActionRule,
+}
+
+fn default_bin_shadow() -> ActionRule {
+    ActionRule {
+        action: Action::Fail,
+    }
 }
 
 fn default_advisory_coverage() -> ActionRule {
@@ -148,7 +157,7 @@ pub struct Violation {
     pub configured_action: Action,
     /// Action after warn-first downgrade.
     pub effective_action: Action,
-    /// German explanation.
+    /// Explanation shown in the report.
     pub message: String,
 }
 
@@ -179,6 +188,8 @@ pub struct Evaluation<'a> {
     pub advisories: &'a AdvisoryReport,
     /// `name@version` lines. `None` skips the new-dependency rule.
     pub baseline: Option<&'a BTreeSet<String>>,
+    /// Trusted bin names declared by a package that does not publish them.
+    pub bin_shadows: &'a [BinShadow],
 }
 
 impl Policy {
@@ -264,6 +275,7 @@ pub fn decide(policy: &Policy, input: Evaluation<'_>) -> Decision {
     consider_advisory_coverage(policy, input.advisories, &mut violations);
     consider_secrets(policy, input.heuristics, &mut violations);
     consider_execution(input.heuristics, &mut violations);
+    consider_bin_shadows(policy, input.bin_shadows, &mut violations);
     for violation in &mut violations {
         violation.effective_action = effective(policy.mode, violation.configured_action);
     }
@@ -282,6 +294,28 @@ pub fn decide(policy: &Policy, input: Evaluation<'_>) -> Decision {
         exit_code,
         violations,
         notes,
+    }
+}
+
+fn consider_bin_shadows(policy: &Policy, shadows: &[BinShadow], violations: &mut Vec<Violation>) {
+    let rule = &policy.rules.bin_shadow;
+    if rule.action == Action::Allow {
+        return;
+    }
+    for shadow in shadows {
+        let publishers = publishers_for(&shadow.command).unwrap_or(&[]);
+        let allowed = publishers.join(", ");
+        violations.push(Violation {
+            rule: "bin_shadow",
+            package_name: shadow.package_name.clone(),
+            package_version: shadow.package_version.clone(),
+            configured_action: rule.action,
+            effective_action: rule.action,
+            message: format!(
+                "Package {}@{} declares bin `{}`, which shadows a trusted build command published by {allowed}.",
+                shadow.package_name, shadow.package_version, shadow.command
+            ),
+        });
     }
 }
 
@@ -687,6 +721,7 @@ mod tests {
         assert_eq!(policy.rules.no_outbound_build.action, Action::Fail);
         assert_eq!(policy.rules.known_vulnerable.min_severity, Severity::High);
         assert_eq!(policy.rules.advisory_coverage.action, Action::Warn);
+        assert_eq!(policy.rules.bin_shadow.action, Action::Fail);
         assert!(policy.rules.install_scripts.allow.is_empty());
         assert!(known_downloader("puppeteer"));
         assert!(known_downloader("puppeteer-core"));
@@ -711,6 +746,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(policy.rules.advisory_coverage.action, Action::Warn);
+        assert_eq!(policy.rules.bin_shadow.action, Action::Fail);
     }
 
     #[test]
@@ -731,6 +767,7 @@ mod tests {
                 heuristics: &[],
                 advisories: &advisories,
                 baseline: None,
+                bin_shadows: &[],
             },
         );
         assert!(decision.exit_code >= 1);
@@ -776,6 +813,7 @@ mod tests {
                 heuristics: &[],
                 advisories: &advisories,
                 baseline: None,
+                bin_shadows: &[],
             },
         );
         assert_eq!(decision.exit_code, 1);
@@ -817,6 +855,7 @@ mod tests {
                 heuristics: &heuristics,
                 advisories: &advisories,
                 baseline: None,
+                bin_shadows: &[],
             },
         );
         assert_eq!(decision.exit_code, 2);
@@ -849,6 +888,7 @@ mod tests {
                 heuristics: &heuristics,
                 advisories: &empty_advisories(),
                 baseline: None,
+                bin_shadows: &[],
             },
         );
         assert!(
@@ -887,6 +927,7 @@ mod tests {
                 heuristics: &heuristics,
                 advisories: &empty_advisories(),
                 baseline: None,
+                bin_shadows: &[],
             },
         );
         assert!(
@@ -910,6 +951,7 @@ mod tests {
                 heuristics: &[],
                 advisories: &empty_advisories(),
                 baseline: Some(&baseline),
+                bin_shadows: &[],
             },
         );
         assert_eq!(decision.exit_code, 1);
@@ -932,6 +974,7 @@ mod tests {
                 heuristics: &[],
                 advisories: &empty_advisories(),
                 baseline: None,
+                bin_shadows: &[],
             },
         );
         assert_eq!(plain_decision.exit_code, 0);
@@ -947,6 +990,7 @@ mod tests {
                 heuristics: &[],
                 advisories: &empty_advisories(),
                 baseline: None,
+                bin_shadows: &[],
             },
         );
         assert_eq!(missing_decision.exit_code, 1);
@@ -968,6 +1012,7 @@ mod tests {
                 heuristics: &heuristics,
                 advisories: &empty_advisories(),
                 baseline: None,
+                bin_shadows: &[],
             },
         );
         assert_eq!(hostile_decision.exit_code, 2);
@@ -1002,6 +1047,7 @@ mod tests {
                 heuristics: &fetch_hits,
                 advisories: &empty_advisories(),
                 baseline: None,
+                bin_shadows: &[],
             },
         );
         assert_eq!(fetch_decision.exit_code, 1);
@@ -1019,6 +1065,7 @@ mod tests {
                 heuristics: &obfuscated_hits,
                 advisories: &empty_advisories(),
                 baseline: None,
+                bin_shadows: &[],
             },
         );
         assert_eq!(obfuscated_decision.exit_code, 2);
@@ -1039,6 +1086,7 @@ mod tests {
                 heuristics: &shell_hits,
                 advisories: &empty_advisories(),
                 baseline: None,
+                bin_shadows: &[],
             },
         );
         assert_eq!(shell_decision.exit_code, 2);
@@ -1064,6 +1112,7 @@ mod tests {
                 heuristics: &native_hits,
                 advisories: &empty_advisories(),
                 baseline: None,
+                bin_shadows: &[],
             },
         );
         assert!(
@@ -1084,6 +1133,7 @@ mod tests {
                 heuristics: &browser_hits,
                 advisories: &empty_advisories(),
                 baseline: None,
+                bin_shadows: &[],
             },
         );
         assert!(
@@ -1103,6 +1153,7 @@ mod tests {
                 heuristics: &piped_hits,
                 advisories: &empty_advisories(),
                 baseline: None,
+                bin_shadows: &[],
             },
         );
         assert!(

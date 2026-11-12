@@ -40,7 +40,7 @@ A payload that appears only after the shell expands `$(...)`, a here-document, o
 
 ## Trust and `PATH`
 
-A bare trusted name is not resolved through `PATH`. A package can shadow that name with a dependency bin in `node_modules/.bin`, or with its own `bin` field once npm has linked it into the parent `node_modules/.bin`. Dependency entries are symlinks, which Mode 1 does not follow. Own-`bin` shadowing is a residual risk. See ADR 014.
+A bare trusted name is not resolved through `PATH`, and Mode 1 does not follow `node_modules/.bin` symlinks. Shadowing of a trusted command is read from the lockfile `bin` field instead. A package that is not an allowed publisher of that command produces `bin_shadow`, and hooks that call the bare name are `unverified`. A `bin` npm installs without writing it into `packages[].bin` is not visible. See ADR 014.
 
 A `--require` / `--import` value that is a bare module name is not resolved. Only a path-like preload is read.
 

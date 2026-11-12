@@ -23,12 +23,11 @@ An empty hook body and an unknown command were both reported as `inspected`, whi
 
 ### `bin` and `node_modules/.bin`
 
-npm runs lifecycle scripts with `node_modules/.bin` of the package and of its ancestors prepended to `PATH` ([npm scripts, `path`](https://docs.npmjs.com/cli/v11/using-npm/scripts#path)).
+npm runs lifecycle scripts with `node_modules/.bin` of the package and of its ancestors prepended to `PATH` ([npm scripts, `path`](https://docs.npmjs.com/cli/v11/using-npm/scripts#path)). npm copies each package's `bin` into the lockfile package descriptor ([package-lock.json](https://docs.npmjs.com/cli/v11/configuring-npm/package-lock-json)). The field has the same shape as in `package.json`: an object of command name to path, or a string whose command name is the package name. For a scoped name, npm's normalizer keeps the unscoped part (`@mapbox/node-pre-gyp` with a string `bin` installs the command `node-pre-gyp`).
 
-- A dependency can shadow a trusted bare name. Its `bin` entry is linked into `node_modules/.bin`, and that directory is searched first. npm creates those links as symlinks (Windows shims are generated separately). Mode 1 does not follow symlinks. Treating an existing shim as the command to read would therefore fail the read and mark ordinary `node-gyp rebuild` hooks `unverified` once the real tool is installed. That raises the false-positive rate. This change does not do it.
-- The package's own `bin` field is linked into the *parent* `node_modules/.bin`, not into the package's own `.bin`. After npm has linked bins, that parent directory is also on `PATH`. The package can shadow a trusted name when no dependency publishes the same bin. The target is a regular file inside the package and could be read without following a symlink.
+Lockward reads that field. A trusted command has an allow-list of publisher package names, taken from those packages' published `bin` maps (npm registry, 2026-11-12). If any other package in the lockfile declares that command, the scan emits `bin_shadow` and every hook that uses the bare name is `unverified` instead of `trusted_build`. The real publisher declaring its own command is not a finding. A lockfile with no `bin` field keeps the previous behavior.
 
-Decision: bare trusted names stay trusted. Path forms are read. `PATH` is not simulated. Own-`bin` shadowing is a residual risk, recorded in `docs/LIMITS.md`, not an extension of `TRUSTED_COMMANDS`. The bypass closed here is a path-form `argv[0]`, which the shell never resolves through `PATH`.
+Mode 1 still does not follow `node_modules/.bin` symlinks and does not simulate `PATH`. The lockfile declaration is the signal. A bin that npm links without recording it in `packages[].bin` is not seen. That remaining gap is in `docs/LIMITS.md`.
 
 ## Rationale
 
@@ -41,6 +40,6 @@ The interpreter list is the set of programs that appear as the direct runner of 
 ## Alternatives
 
 - Keep trusting the base name and ignore path forms. That leaves `./husky` unexamined.
-- Resolve `node_modules/.bin` and follow symlinks when the target stays inside the project. That closes dependency shadowing and flags legitimate native builds that depend on `node-gyp`. The corpus false-positive rate is the reason not to do it here.
+- Resolve `node_modules/.bin` and follow symlinks. That reads the file npm linked, including a legitimate `node-gyp` shim, and marks the hook `unverified` when the shim is a symlink Mode 1 will not follow. The lockfile `bin` field names the publisher without opening the shim.
 - Treat every unknown command as `inspected` when the raw text has no heuristic hit. That hides a command the analyzer did not understand.
 - Drop empty hooks. The manifest still declares the hook; the report should say so without asking for a review.

