@@ -1,10 +1,10 @@
 # Lockward GitHub Action
 
-Composite Action für den statischen npm-Scan. Sie führt `lockward scan` aus, hängt die Kurzfassung an die GitHub Step Summary und kann den PR-Kommentar aus `comment.md` posten. Der Exit-Code der Action ist der Gate-Code: `0` OK, `1` Warnung, `2` Fail.
+Composite action for the static npm scan. It runs `lockward scan`, appends the short summary to the GitHub step summary, and can post the pull-request comment from `comment.md`. The action exit code is the gate code: `0` OK, `1` Warning, `2` Fail.
 
-Die Action erwartet eine gebaute Binary. Sie lädt kein Release herunter, solange noch keines veröffentlicht ist.
+The action expects a built binary. It does not download a release while none is published.
 
-## Beispiel
+## Example
 
 ```yaml
 permissions:
@@ -22,8 +22,8 @@ steps:
       lockward-bin: target/release/lockward
 ```
 
-`comment: "false"` unterdrückt den PR-Kommentar. `offline: "true"` liest nur den Advisory-Cache.
+`comment: "false"` skips the pull-request comment. `offline: "true"` reads only the advisory cache.
 
 ## Marketplace
 
-`action.yml` ist das Manifest (Name, Beschreibung, Inputs, Outputs, Branding). Die Veröffentlichung im Marketplace braucht ein öffentliches Repo und einen Tag. Das ist ein manueller Schritt und läuft nicht in diesem Nachtlauf.
+`action.yml` is the manifest (name, description, inputs, outputs, branding). Publishing to the Marketplace needs a public repository and a tag. That is a manual step and does not run in this nightly job.
