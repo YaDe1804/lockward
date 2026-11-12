@@ -933,7 +933,7 @@ mod tests {
                 advisories: vec![Advisory {
                     id: "GHSA-test".to_owned(),
                     aliases: Vec::new(),
-                    summary: "hoch".to_owned(),
+                    summary: "fixture".to_owned(),
                     severity: Severity::High,
                     cvss_score: None,
                     url: "https://example.invalid".to_owned(),
