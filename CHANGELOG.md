@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Users of 0.1.1 should update. 0.1.1 and older receive no further security
+  fixes.
 - Hook analysis no longer treats a trusted command as a trusted build when
   the arguments run shell code (`$(...)`, backticks, process substitution,
   subshells, brace groups, here-documents, and `eval` / `source` / `.`).
