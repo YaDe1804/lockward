@@ -657,6 +657,7 @@ mod tests {
             cache_hits: 0,
             cache_misses: 0,
             offline: true,
+            warnings: Vec::new(),
         }
     }
 
@@ -720,6 +721,7 @@ mod tests {
             cache_hits: 0,
             cache_misses: 2,
             offline: true,
+            warnings: Vec::new(),
         };
         let decision = decide(
             &policy,
@@ -764,6 +766,7 @@ mod tests {
             cache_hits: 0,
             cache_misses: 0,
             offline: true,
+            warnings: Vec::new(),
         };
         let decision = decide(
             &policy,
@@ -804,6 +807,7 @@ mod tests {
             cache_hits: 0,
             cache_misses: 0,
             offline: true,
+            warnings: Vec::new(),
         };
         let decision = decide(
             &policy,

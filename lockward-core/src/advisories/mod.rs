@@ -98,6 +98,12 @@ pub struct AdvisoryReport {
     pub cache_misses: usize,
     /// True when the network was not used.
     pub offline: bool,
+    /// Cache writes that failed. The advisory list is still valid.
+    ///
+    /// Not part of the report document. [`crate::scan::analyze`] copies these
+    /// into the decision notes.
+    #[serde(skip)]
+    pub warnings: Vec<String>,
 }
 
 /// HTTP surface used by the OSV client. Tests supply a fake.
@@ -249,6 +255,7 @@ impl<T: HttpTransport> OsvClient<T> {
         }
 
         let mut cache_misses = 0;
+        let mut warnings = Vec::new();
         if !pending.is_empty() {
             if self.offline {
                 cache_misses = pending.len();
@@ -260,7 +267,12 @@ impl<T: HttpTransport> OsvClient<T> {
                 for (index, advisories) in fetched {
                     if let Some(cache) = &self.cache {
                         let package = &packages[index];
-                        cache.put(&package.name, &package.version, &advisories)?;
+                        if let Err(err) = cache.put(&package.name, &package.version, &advisories) {
+                            warnings.push(format!(
+                                "advisory cache write failed for {}@{}: {err}",
+                                package.name, package.version
+                            ));
+                        }
                     }
                     resolved[index] = Some(advisories);
                 }
@@ -283,6 +295,7 @@ impl<T: HttpTransport> OsvClient<T> {
             cache_hits,
             cache_misses,
             offline: self.offline,
+            warnings,
         })
     }
 
@@ -681,6 +694,31 @@ mod tests {
         assert_eq!(second.packages, first.packages);
         assert_eq!(transport.posts.load(Ordering::SeqCst), 1);
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn cache_write_failure_keeps_the_advisory_result() {
+        let path = std::env::temp_dir().join(format!("lockward-osv-ro-{}", std::process::id()));
+        let _ = fs::remove_file(&path);
+        fs::write(&path, b"not a directory").unwrap();
+        let transport = Scripted {
+            posts: AtomicUsize::new(0),
+            gets: AtomicUsize::new(0),
+        };
+        let report = OsvClient::new(&transport)
+            .with_cache(FileCache::new(&path))
+            .query(std::slice::from_ref(&sample()[0]))
+            .expect("a cache write must not fail the query");
+        assert_eq!(report.packages[0].advisories[0].id, "GHSA-35jh-r3h4-6jhm");
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("lodash@4.17.20")),
+            "{:?}",
+            report.warnings
+        );
+        fs::remove_file(&path).unwrap();
     }
 
     #[test]

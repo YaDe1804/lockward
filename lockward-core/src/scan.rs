@@ -102,7 +102,7 @@ pub fn analyze<T: HttpTransport>(
     }
     let advisories = client.query(&package_queries(&lock))?;
     let score = score(&lock, &advisories, &heuristics);
-    let decision = decide(
+    let mut decision = decide(
         &options.policy,
         Evaluation {
             graph: &graph,
@@ -112,6 +112,9 @@ pub fn analyze<T: HttpTransport>(
             baseline: options.baseline.as_ref(),
         },
     );
+    decision.notes.extend(advisories.warnings.iter().cloned());
+    decision.notes.sort();
+    decision.notes.dedup();
     Ok(Analysis {
         lock,
         lock_path,
@@ -167,5 +170,51 @@ mod tests {
         assert_eq!(analysis.decision.mode, Mode::Warn);
         assert_eq!(analysis.decision.exit_code, 1);
         assert!(!analysis.hooks.findings.is_empty());
+    }
+
+    struct EmptyBatch;
+
+    impl HttpTransport for EmptyBatch {
+        fn post_json(&self, url: &str, body: &Value) -> Result<Value> {
+            assert!(url.ends_with("/v1/querybatch"), "{url}");
+            let queries = body["queries"].as_array().map(Vec::len).unwrap_or(0);
+            Ok(serde_json::json!({ "results": vec![serde_json::json!({}); queries] }))
+        }
+
+        fn get_json(&self, url: &str) -> Result<Value> {
+            Err(Error::Advisory {
+                url: url.to_owned(),
+                message: "unexpected detail fetch".to_owned(),
+            })
+        }
+    }
+
+    #[test]
+    fn cache_write_failure_is_a_note_and_the_scan_stays_valid() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/report/mini");
+        let cache = std::env::temp_dir().join(format!("lockward-scan-ro-{}", std::process::id()));
+        let _ = std::fs::remove_file(&cache);
+        std::fs::write(&cache, b"not a directory").unwrap();
+        let analysis = analyze(
+            &root,
+            &EmptyBatch,
+            &AnalyzeOptions {
+                offline: false,
+                cache_dir: Some(cache.clone()),
+                policy: Policy::default_policy().unwrap(),
+                baseline: None,
+            },
+        )
+        .expect("a cache write must not fail the scan");
+        assert!(
+            analysis
+                .decision
+                .notes
+                .iter()
+                .any(|note| note.contains("advisory cache write failed")),
+            "{:?}",
+            analysis.decision.notes
+        );
+        std::fs::remove_file(&cache).unwrap();
     }
 }
