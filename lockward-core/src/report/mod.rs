@@ -4,7 +4,6 @@
 
 use crate::advisories::Severity;
 use crate::ingest::Package;
-use crate::policy::{Action, Mode, Outcome};
 use crate::scan::Analysis;
 use crate::{Error, Result, VERSION};
 use base64::Engine;
@@ -54,13 +53,13 @@ fn render_markdown(analysis: &Analysis, scanned_at: &str) -> String {
     out.push_str(&format!(
         "**Score:** {} ({})\n\n",
         analysis.score.project_score,
-        severity_de(analysis.score.project_severity)
+        analysis.score.project_severity.label()
     ));
     out.push_str(&format!(
         "**Gate:** {} · Exit {} · Modus {}\n\n",
-        outcome_de(analysis.decision.outcome),
+        analysis.decision.outcome.label(),
         analysis.decision.exit_code,
-        mode_de(analysis.decision.mode)
+        analysis.decision.mode.label()
     ));
     out.push_str("### Warum\n\n");
     if analysis.score.packages.is_empty() && analysis.decision.violations.is_empty() {
@@ -116,7 +115,7 @@ fn render_markdown(analysis: &Analysis, scanned_at: &str) -> String {
                 markdown_span(&package.name),
                 markdown_span(&package.version),
                 markdown_span(&advisory.id),
-                severity_de(advisory.severity)
+                advisory.severity.label()
             ));
         }
     }
@@ -135,10 +134,10 @@ fn render_summary(analysis: &Analysis, scanned_at: &str) -> String {
     out.push_str(&format!(
         "Score **{}** ({}) · Gate **{}** (Exit {}, Modus {}) · {scanned_at}\n\n",
         analysis.score.project_score,
-        severity_de(analysis.score.project_severity),
-        outcome_de(analysis.decision.outcome),
+        analysis.score.project_severity.label(),
+        analysis.decision.outcome.label(),
         analysis.decision.exit_code,
-        mode_de(analysis.decision.mode)
+        analysis.decision.mode.label()
     ));
     if analysis.decision.violations.is_empty() {
         out.push_str("Keine Policy-Verstöße.\n");
@@ -157,6 +156,7 @@ fn render_summary(analysis: &Analysis, scanned_at: &str) -> String {
 fn render_json(analysis: &Analysis, scanned_at: &str) -> Result<String> {
     let document = JsonReport {
         lockward_version: VERSION,
+        report_version: REPORT_VERSION,
         score_version: analysis.score.version,
         heuristics_version: analysis.score.heuristics_version,
         scanned_at,
@@ -165,8 +165,8 @@ fn render_json(analysis: &Analysis, scanned_at: &str) -> Result<String> {
         project_score: analysis.score.project_score,
         project_severity: analysis.score.project_severity,
         gate: JsonGate {
-            mode: mode_de(analysis.decision.mode),
-            outcome: outcome_de(analysis.decision.outcome),
+            mode: analysis.decision.mode.as_str(),
+            outcome: analysis.decision.outcome.as_str(),
             exit_code: analysis.decision.exit_code,
         },
         packages: &analysis.score.packages,
@@ -178,8 +178,8 @@ fn render_json(analysis: &Analysis, scanned_at: &str) -> Result<String> {
                 rule: violation.rule,
                 package_name: &violation.package_name,
                 package_version: &violation.package_version,
-                configured_action: action_name(violation.configured_action),
-                effective_action: action_name(violation.effective_action),
+                configured_action: violation.configured_action.as_str(),
+                effective_action: violation.effective_action.as_str(),
                 message: &violation.message,
             })
             .collect(),
@@ -552,43 +552,13 @@ fn markdown_span(raw: &str) -> String {
     format!("`{}`", one_line(raw))
 }
 
-fn severity_de(severity: Severity) -> &'static str {
-    match severity {
-        Severity::Critical => "kritisch",
-        Severity::High => "hoch",
-        Severity::Medium => "mittel",
-        Severity::Low => "niedrig",
-        Severity::Unknown => "unbekannt",
-    }
-}
-
-fn outcome_de(outcome: Outcome) -> &'static str {
-    match outcome {
-        Outcome::Ok => "OK",
-        Outcome::Warn => "Warnung",
-        Outcome::Fail => "Block",
-    }
-}
-
-fn mode_de(mode: Mode) -> &'static str {
-    match mode {
-        Mode::Warn => "warn",
-        Mode::Enforce => "enforce",
-    }
-}
-
-fn action_name(action: Action) -> &'static str {
-    match action {
-        Action::Allow => "allow",
-        Action::Warn => "warn",
-        Action::Review => "review",
-        Action::Fail => "fail",
-    }
-}
+/// JSON document shape. Free-text fields are not part of this contract.
+pub const REPORT_VERSION: u32 = 2;
 
 #[derive(Serialize)]
 struct JsonReport<'a> {
     lockward_version: &'a str,
+    report_version: u32,
     score_version: &'a str,
     heuristics_version: &'a str,
     scanned_at: &'a str,

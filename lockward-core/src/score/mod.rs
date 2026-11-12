@@ -234,7 +234,7 @@ fn advisory_sentence(name: &str, version: &str, advisory: &crate::advisories::Ad
     format!(
         "Paket {name}@{version} ist von {} betroffen (Schwere {}): {summary}.",
         advisory.id,
-        severity_de(advisory.severity)
+        advisory.severity.label()
     )
 }
 
@@ -242,16 +242,6 @@ fn explanation_order(left: &Explanation, right: &Explanation) -> std::cmp::Order
     left.source
         .cmp(&right.source)
         .then(left.sort_key.cmp(&right.sort_key))
-}
-
-fn severity_de(severity: Severity) -> &'static str {
-    match severity {
-        Severity::Critical => "kritisch",
-        Severity::High => "hoch",
-        Severity::Medium => "mittel",
-        Severity::Low => "niedrig",
-        Severity::Unknown => "unbekannt",
-    }
 }
 
 #[cfg(test)]

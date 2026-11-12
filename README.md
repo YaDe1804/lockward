@@ -64,6 +64,14 @@ Static parsing only. Lockward reads `package-lock.json` (v2/v3) and the `package
 
 `lockward scan . --format cyclonedx` writes a CycloneDX 1.6 document (`bom.cdx.json`). Each locked `name@version` is one component, with its package URL, license, and integrity hash when the lockfile has them. `scope` is `required`, `optional`, or `excluded` for a dev dependency. A dev dependency also has the property `lockward:dev` set to `true`. A peer dependency has `lockward:peer` set to `true` and keeps its scope. `dependencies` is the resolved lockfile graph: every component has an entry, `dependsOn` is sorted, and a component with no dependencies has an empty list. Edges the resolver could not place are counted as `lockward:unresolved-edges` on the root component. `serialNumber` follows the document content, so the same lockfile yields the same number. `metadata.timestamp` is the scan time. The mapping is ADR 015.
 
+## JSON report
+
+`--format json` writes `report.json`. `report_version` is `2`.
+
+Stable fields are the identifiers a program can match: `report_version`, `lockward_version`, `score_version`, `heuristics_version`, `project_score`, `project_severity`, `gate.mode`, `gate.outcome`, `gate.exit_code`, `rule`, `rule_id`, `configured_action`, `effective_action`, `disposition`, and `provenance`. `gate.outcome` is `ok`, `warn`, or `fail`. `project_severity` is `critical`, `high`, `medium`, `low`, or `unknown`.
+
+`message`, `explanation`, `description`, and `notes` are English sentences. They are not a stable contract. The words `OK`, `Warning`, and `Fail` appear only in the Markdown comment, the CI summary, and the terminal. They are not JSON values.
+
 ## Compliance: CRA & NIS2
 
 The EU **Cyber Resilience Act (CRA)** requires a machine-readable SBOM and formalized vulnerability management; **NIS2** requires assessing and securing critical suppliers — including the software supply chain. Lockward produces a **CycloneDX 1.6 SBOM** and an auditable, policy-gated supply-chain check that supports those obligations.

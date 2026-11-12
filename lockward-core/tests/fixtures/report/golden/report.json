@@ -1,5 +1,6 @@
 {
   "lockward_version": "0.1.2",
+  "report_version": 2,
   "score_version": "score-v1",
   "heuristics_version": "heuristics-v1.1",
   "scanned_at": "2026-10-12T00:00:00Z",
@@ -9,7 +10,7 @@
   "project_severity": "high",
   "gate": {
     "mode": "warn",
-    "outcome": "Warnung",
+    "outcome": "warn",
     "exit_code": 1
   },
   "packages": [

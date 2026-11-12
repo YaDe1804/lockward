@@ -4,9 +4,9 @@
 
 **Zeitpunkt:** 2026-10-12T00:00:00Z
 
-**Score:** 50 (hoch)
+**Score:** 50 (high)
 
-**Gate:** Warnung · Exit 1 · Modus warn
+**Gate:** Warning · Exit 1 · Modus warn
 
 ### Warum
 

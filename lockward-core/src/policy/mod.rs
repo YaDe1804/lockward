@@ -33,6 +33,23 @@ pub enum Mode {
     Enforce,
 }
 
+impl Mode {
+    /// Stable identifier for JSON and for the mode label.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Warn => "warn",
+            Self::Enforce => "enforce",
+        }
+    }
+
+    /// Display label. Mode uses the same word as [`Self::as_str`].
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        self.as_str()
+    }
+}
+
 /// Configured or effective gate action.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -47,6 +64,25 @@ pub enum Action {
     Fail,
 }
 
+impl Action {
+    /// Stable identifier for JSON and for the action label.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Allow => "allow",
+            Self::Warn => "warn",
+            Self::Review => "review",
+            Self::Fail => "fail",
+        }
+    }
+
+    /// Display label. An action uses the same word as [`Self::as_str`].
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        self.as_str()
+    }
+}
+
 /// Overall gate result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Outcome {
@@ -56,6 +92,28 @@ pub enum Outcome {
     Warn,
     /// At least one effective fail.
     Fail,
+}
+
+impl Outcome {
+    /// Stable JSON identifier: `ok`, `warn`, or `fail`.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::Warn => "warn",
+            Self::Fail => "fail",
+        }
+    }
+
+    /// Display label. This is not the JSON identifier.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Ok => "OK",
+            Self::Warn => "Warning",
+            Self::Fail => "Fail",
+        }
+    }
 }
 
 /// Loaded policy.
@@ -536,8 +594,8 @@ fn consider_vulnerabilities(
                     advisory.id,
                     package.name,
                     package.version,
-                    severity_de(advisory.severity),
-                    severity_de(rule.min_severity)
+                    advisory.severity.label(),
+                    rule.min_severity.label()
                 ),
             });
         }
@@ -682,16 +740,6 @@ fn outcome(exit_code: u8) -> Outcome {
         0 => Outcome::Ok,
         1 => Outcome::Warn,
         _ => Outcome::Fail,
-    }
-}
-
-fn severity_de(severity: Severity) -> &'static str {
-    match severity {
-        Severity::Critical => "kritisch",
-        Severity::High => "hoch",
-        Severity::Medium => "mittel",
-        Severity::Low => "niedrig",
-        Severity::Unknown => "unbekannt",
     }
 }
 

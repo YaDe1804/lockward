@@ -39,7 +39,7 @@ fn offline_corpus_exits_with_warning() {
         .args(["scan", corpus.to_str().expect("utf-8 path"), "--offline"])
         .assert()
         .code(1)
-        .stdout(predicate::str::contains("Warnung"))
+        .stdout(predicate::str::contains("Warning"))
         .stdout(predicate::str::contains("install_scripts"))
         .stdout(predicate::str::contains("advisory_coverage"))
         .stdout(predicate::str::contains(
@@ -64,7 +64,7 @@ fn enforce_fail_policy_exits_2() {
         ])
         .assert()
         .code(2)
-        .stdout(predicate::str::contains("Block"));
+        .stdout(predicate::str::contains("Fail"));
 }
 
 #[test]

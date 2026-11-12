@@ -8,7 +8,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use lockward_core::advisories::ReqwestTransport;
-use lockward_core::policy::{Mode, Outcome, Policy, load_policy, parse_baseline, render_baseline};
+use lockward_core::policy::{Mode, Policy, load_policy, parse_baseline, render_baseline};
 use lockward_core::report::{ReportKind, render};
 use lockward_core::resolve::resolve;
 use lockward_core::scan::{Analysis, AnalyzeOptions, analyze, locate_lockfile};
@@ -316,21 +316,14 @@ fn write_baseline(path: &Path, output: Option<&Path>) -> Result<()> {
 }
 
 fn print_summary(analysis: &Analysis) -> Result<()> {
-    let outcome = match analysis.decision.outcome {
-        Outcome::Ok => "OK",
-        Outcome::Warn => "Warnung",
-        Outcome::Fail => "Block",
-    };
-    let mode = match analysis.decision.mode {
-        Mode::Warn => "warn",
-        Mode::Enforce => "enforce",
-    };
+    let outcome = analysis.decision.outcome.label();
+    let mode = analysis.decision.mode.label();
     println!("Lockward {VERSION}");
     println!("Ziel: {}", analysis.project_root.display());
     println!(
         "Score: {} ({})",
         analysis.score.project_score,
-        severity_de(analysis.score.project_severity)
+        analysis.score.project_severity.label()
     );
     println!(
         "Gate: {outcome} (Exit {}, Modus {mode})",
@@ -365,16 +358,6 @@ fn print_summary(analysis: &Analysis) -> Result<()> {
         }
     }
     Ok(())
-}
-
-fn severity_de(severity: lockward_core::Severity) -> &'static str {
-    match severity {
-        lockward_core::Severity::Critical => "kritisch",
-        lockward_core::Severity::High => "hoch",
-        lockward_core::Severity::Medium => "mittel",
-        lockward_core::Severity::Low => "niedrig",
-        lockward_core::Severity::Unknown => "unbekannt",
-    }
 }
 
 fn default_cache_dir() -> PathBuf {
