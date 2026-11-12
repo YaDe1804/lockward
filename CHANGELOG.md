@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parser's limits, and why `edgedriver` is not a known downloader.
 - `SECURITY.md`, this changelog, `deny.toml`, and a pull request template.
   `cargo deny check` runs in the existing CI job. Push builds run on `main`
-  only.
+  only. The test suite also runs on Windows and macOS.
 
 ### Fixed
 
