@@ -69,6 +69,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The CycloneDX document changed. A document from 0.1.1 does not compare
+  field-for-field with a document from this release:
+  - A dev dependency is `scope` `excluded` and has the property
+    `lockward:dev` set to `true`. It used to be `optional`. An optional
+    dependency that is not a dev dependency is `scope` `optional`.
+  - Every component, including the root, has a `bom-ref`. The same
+    `name@version` at more than one path is one component.
+  - `dependencies` lists the root and every component. `dependsOn` is sorted.
+    A component with no dependencies has an empty list. Unresolved edges are
+    not listed; their count is `lockward:unresolved-edges` on the root.
+  - `serialNumber` is derived from the document without `serialNumber` and
+    without `metadata.timestamp`. A different timestamp does not change it.
+    A different component, scope, license, hash, edge, or Lockward version
+    does.
 - CVSS boundary cases from the FIRST v3.1 specification and examples are
   locked in tests. The formula is unchanged.
 - `KNOWN_DOWNLOADERS` and `TRUSTED_COMMANDS` are checked to stay strictly
