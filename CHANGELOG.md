@@ -59,7 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   double quotes. Process substitution, subshells, brace groups,
   here-documents, and `eval` / `source` / `.` are `unverified`. Plain
   `$NAME`, `${NAME}`, and output redirections such as `2>&1` stay trusted.
-  The same text inside single quotes stays literal.
+  The same text inside single quotes stays literal. Four inert regression
+  cases cover the substitution bypass and stay outside the 72-case metrics.
 
 ### Changed
 

@@ -1,0 +1,4 @@
+expected: malicious
+expected_rules: [no_outbound_build]
+source: "Backtick substitution on a trusted command — reconstructed pattern, inert payload"
+notes: "postinstall is husky `node install.js`. The curl pattern is a comment in install.js. Lockward reads it and does not execute it."

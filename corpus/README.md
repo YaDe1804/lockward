@@ -31,9 +31,11 @@ corpus/
   regression/<fall>/
 ```
 
-`regression/` hält die vier behobenen Hook-Formen (`./husky`, `node --require`,
-`sh -c`, `bun`). Die Harness misst sie und verlangt `fail`. Precision, Recall,
-F1 und die FP-Rate rechnen nur `malicious/` und `benign/` (72 Fälle).
+`regression/` hält die behobenen Hook-Formen (`./husky`, `node --require`,
+`sh -c`, `bun`, sowie ein vertrautes Kommando mit `$(...)`, Backticks,
+doppeltem `$(...)` oder `<(...)`). Die Harness misst sie und verlangt `fail`.
+Precision, Recall, F1 und die FP-Rate rechnen nur `malicious/` und `benign/`
+(72 Fälle).
 
 Jeder Fall hat `package-lock.json` (lockfileVersion 3), bei Bedarf
 `package.json` unter `node_modules/…`, und `label.yaml`.

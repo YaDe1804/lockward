@@ -8,7 +8,7 @@ numbers, including the uncomfortable ones.
 ## Method
 
 - **Corpus:** 72 cases under [`corpus/`](../corpus) — 16 malicious, 56 benign.
-  Four regression cases live beside that set and are not part of these numbers.
+  Eight regression cases live beside that set and are not part of these numbers.
   See [Regression cases](#regression-cases).
   - **Malicious** cases are *patterns reconstructed* from publicly documented npm
     supply-chain incidents (event-stream, ua-parser-js, crossenv-style
@@ -55,16 +55,18 @@ False-positive rate by cohort:
 
 ## Regression cases
 
-`corpus/regression/` holds the four hook forms that used to skip inspection:
-`./husky`, `node --require`, `sh -c`, and `bun`. They are reconstructed,
-inert payloads. `lockward-eval` scans them and prints them apart from the
-matrix. Each one must come back `fail`; any other severity aborts the run.
+`corpus/regression/` holds the hook forms that used to skip inspection:
+`./husky`, `node --require`, `sh -c`, `bun`, and a trusted command whose
+arguments are `$(...)`, backticks, a double-quoted `$(...)`, or `<(...)`.
+They are reconstructed, inert payloads. `lockward-eval` scans them and
+prints them apart from the matrix. Each one must come back `fail`; any
+other severity aborts the run.
 
 They are not in the 72-case recall, precision, F1, or false-positive rate.
 Those forms are bugs that are fixed today, so counting them as fresh
 detections would make the published numbers look better without measuring a
 harder corpus. The 72-case set stays the comparison point. The regression
-set only answers whether those four bypasses stay closed.
+set only answers whether those bypasses stay closed.
 
 ## How detection works (why the numbers look like this)
 

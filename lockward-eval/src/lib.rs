@@ -892,7 +892,7 @@ mod tests {
         assert!(text.contains("False negatives"));
         assert!(text.contains("False positives"));
         assert!(text.contains("Regressionen"));
-        assert_eq!(first.regression.len(), 4);
+        assert_eq!(first.regression.len(), 8);
         assert!(first.regression.iter().all(|case| case.severity == "fail"));
         assert_eq!(first.cases.len(), 72);
         assert!(text.contains(SCOPE_NOTE));
@@ -992,6 +992,10 @@ mod tests {
             "regression/node-require-preload",
             "regression/shell-c-node",
             "regression/bun-entry",
+            "regression/command-subst-husky",
+            "regression/backtick-subst-husky",
+            "regression/quoted-subst-node-gyp",
+            "regression/process-subst-husky",
         ] {
             let item = regression(id);
             assert_eq!(item.severity, "fail", "{id}");
