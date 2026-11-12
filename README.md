@@ -39,7 +39,7 @@ Exit codes: `0` clean · `1` warnings/review · `2` fail (enforce mode) or runti
 
 ### In CI (GitHub Actions)
 ```yaml
-- uses: YaDe1804/lockward@v0.1.2   # from the GitHub Marketplace
+- uses: YaDe1804/lockward@v0.2.0   # from the GitHub Marketplace
   with:
     path: .
     mode: warn        # or "enforce"
