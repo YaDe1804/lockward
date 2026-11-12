@@ -29,7 +29,7 @@ The splitter keeps the characters it does not understand as literal token text, 
 
 - A bare name in `TRUSTED_COMMANDS` is a trusted build command.
 - Recognized inline source (`node -e`, `python -c`, `bun -e`, `deno eval`, and the other inline forms in ADR 014) stays in the hook body.
-- A path, or an interpreter plus a script path, is read as a local file when the read is allowed.
+- A path, or an interpreter plus a script path, is read as a local file when the read is allowed. `\` in a script path is rewritten to `/` before the escape, symlink, and canonicalize checks.
 - Anything else is `unverified`, and the report carries a warning. It is not `inspected`.
 
 The original hook string is still handed to the heuristics unchanged. A `curl | sh` that the splitter divides into two commands can still match `LW-H004`, because that rule scans the raw text.
