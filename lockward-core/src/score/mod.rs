@@ -25,7 +25,7 @@ pub const HEURISTIC_CAP: u32 = 60;
 pub struct Explanation {
     /// Advisory id or heuristic rule id.
     pub source: String,
-    /// German reason.
+    /// Plain-language reason. Not a stable contract.
     pub text: String,
     /// Hook and evidence, or the advisory id. Not display text.
     #[serde(skip)]
@@ -227,12 +227,12 @@ pub fn score_parts(
 
 fn advisory_sentence(name: &str, version: &str, advisory: &crate::advisories::Advisory) -> String {
     let summary = if advisory.summary.is_empty() {
-        "keine Kurzbeschreibung"
+        "no summary"
     } else {
         advisory.summary.as_str()
     };
     format!(
-        "Paket {name}@{version} ist von {} betroffen (Schwere {}): {summary}.",
+        "Package {name}@{version} is affected by {} (severity {}): {summary}.",
         advisory.id,
         advisory.severity.label()
     )
@@ -294,7 +294,7 @@ mod tests {
             package_path: path.to_owned(),
             hook: hook.to_owned(),
             evidence: hook.to_owned(),
-            explanation: format!("Warum {rule} in {hook}."),
+            explanation: format!("why {rule} in {hook}."),
         }
     }
 

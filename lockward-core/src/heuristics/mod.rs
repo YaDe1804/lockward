@@ -47,7 +47,7 @@ pub struct HeuristicFinding {
     pub hook: String,
     /// Short excerpt of the match.
     pub evidence: String,
-    /// German sentence explaining why this is risky.
+    /// Plain-language reason. Not a stable contract.
     pub explanation: String,
 }
 
@@ -88,7 +88,7 @@ pub fn evaluate(hooks: &[HookFinding]) -> Vec<HeuristicFinding> {
             if let Some(mat) = mat {
                 let evidence = clip_evidence(&hook.raw[mat.start()..]);
                 let explanation = format!(
-                    "Paket {}@{} Hook `{}`: {}. Beleg: `{evidence}`.",
+                    "Package {}@{} hook `{}` {}. Evidence: `{evidence}`.",
                     hook.package_name, hook.package_version, hook.hook, rule.reason,
                 );
                 hook_hits.push(HeuristicFinding {
@@ -153,37 +153,37 @@ fn compile(pattern: &str) -> Regex {
 static RULES: [RuleInfo; 6] = [
     RuleInfo {
         id: "LW-H001",
-        description: "Obfuskation im Hook (eval, new Function, atob, unescape, Hex-Escapes)",
+        description: "Obfuscation in an install hook (eval, new Function, atob, unescape, hex escapes)",
         weight: 25,
         example: r#"eval(Buffer.from("aGVsbG8=", "base64").toString())"#,
     },
     RuleInfo {
         id: "LW-H002",
-        description: "Großer Base64-Block, nur zusammen mit einem zweiten Hook-Signal",
+        description: "Large base64 blob, only together with a second hook signal",
         weight: 20,
         example: "curl https://example.invalid/x; const blob = \"bG9ja3dhcmQgaGV1cmlzdGljIGZpeHR1cmUgcGF5bG9hZCB0aGF0IGlzIGxvbmcgZW5vdWdoIGZvciB0aGUgYmFzZTY0IHJ1bGU=\";",
     },
     RuleInfo {
         id: "LW-H003",
-        description: "Netzwerk-Client oder Download-Werkzeug im Hook",
+        description: "Network client or download tool in an install hook",
         weight: 15,
         example: "curl https://example.invalid/health",
     },
     RuleInfo {
         id: "LW-H004",
-        description: "Download direkt in eine Shell (curl|sh oder wget|sh)",
+        description: "Download piped into a shell (curl|sh or wget|sh)",
         weight: 35,
         example: "curl https://example.invalid/setup.sh | sh",
     },
     RuleInfo {
         id: "LW-H005",
-        description: "Shell-out oder child_process",
+        description: "Shell-out or child_process",
         weight: 20,
         example: "child_process.execSync(\"echo fixture\")",
     },
     RuleInfo {
         id: "LW-H006",
-        description: "Zugriff auf Secret-Pfade oder Secret-Variablen",
+        description: "Access to a secret path or a secret variable",
         weight: 40,
         example: "fs.readFileSync(os.homedir() + \"/.ssh/id_rsa\")",
     },
@@ -193,38 +193,38 @@ static COMPILED: LazyLock<Vec<CompiledRule>> = LazyLock::new(|| {
     vec![
         CompiledRule {
             info: RULES[0],
-            reason: "der Hook enthält obfuskierten Code",
+            reason: "contains obfuscated code",
             pattern: compile(
                 r#"(?i)\beval\s*\(|\bnew\s+Function\s*\(|\batob\s*\(|\bunescape\s*\(|(?:\\x[0-9a-fA-F]{2}){4,}"#,
             ),
         },
         CompiledRule {
             info: RULES[1],
-            reason: "der Hook enthält einen großen Base64-Block",
+            reason: "contains a large base64 blob",
             pattern: compile(r#"[A-Za-z0-9+/]{80,}={0,2}"#),
         },
         CompiledRule {
             info: RULES[2],
-            reason: "der Hook spricht mit dem Netzwerk oder lädt Daten herunter",
+            reason: "contacts the network or downloads data",
             pattern: compile(
                 r#"(?i)\bcurl\b|\bwget\b|\bfetch\s*\(|\baxios\b|\bnet\.connect\b|\bhttps?\.request\s*\(|\bhttps?\.get\s*\(|require\s*\(\s*['"]https?['"]\s*\)|require\s*\(\s*['"]node:https?['"]\s*\)"#,
             ),
         },
         CompiledRule {
             info: RULES[3],
-            reason: "der Hook leitet einen Download in eine Shell",
+            reason: "pipes a download into a shell",
             pattern: compile(r#"(?i)\b(?:curl|wget)\b[^|\n]{0,200}\|\s*(?:sudo\s+)?(?:sh|bash)\b"#),
         },
         CompiledRule {
             info: RULES[4],
-            reason: "der Hook startet einen Kindprozess oder eine Shell",
+            reason: "starts a child process or a shell",
             pattern: compile(
                 r#"(?i)child_process|\bexec(?:Sync)?\s*\(|\bspawn(?:Sync)?\s*\(|\b(?:sh|bash)\s+-c\b|\bcmd\.exe\b|\bpowershell(?:\.exe)?\b"#,
             ),
         },
         CompiledRule {
             info: RULES[5],
-            reason: "der Hook liest einen Secret-Pfad oder eine Secret-Variable",
+            reason: "reads a secret path or a secret variable",
             pattern: compile(
                 r#"(?i)(?:(?:^|[/\\])\.ssh\b|(?:^|[/\\])\.npmrc\b|(?:^|[/\\])\.aws\b|~[/\\]\.config\b|[/\\]\.config(?:[/\\]|$)|NPM_TOKEN|AWS_SECRET|id_rsa)"#,
             ),

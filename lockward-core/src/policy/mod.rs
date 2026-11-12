@@ -391,8 +391,8 @@ fn consider_install_scripts(
     for hook in hooks {
         if known_downloader(&hook.package_name) {
             notes.push(format!(
-                "Install-Hook `{}` in {}@{} gehört zu einem bekannten Binary-Downloader; Netzwerk dabei ist erwartet.",
-                hook.hook, hook.package_name, hook.package_version
+                "Package {}@{} install hook `{}` belongs to a known binary downloader. Network access is expected.",
+                hook.package_name, hook.package_version, hook.hook
             ));
         }
         let signals = heuristics.iter().any(|finding| {
@@ -407,16 +407,16 @@ fn consider_install_scripts(
         }
         match hook.disposition {
             crate::hooks::HookDisposition::TrustedBuild => notes.push(format!(
-                "Install-Hook `{}` in {}@{} ist ein vertrautes Build-Kommando.",
-                hook.hook, hook.package_name, hook.package_version
+                "Package {}@{} install hook `{}` is a trusted build command.",
+                hook.package_name, hook.package_version, hook.hook
             )),
             crate::hooks::HookDisposition::Inspected => notes.push(format!(
-                "Install-Hook `{}` in {}@{} enthält kein Verdachtssignal.",
-                hook.hook, hook.package_name, hook.package_version
+                "Package {}@{} install hook `{}` has no suspicious signal.",
+                hook.package_name, hook.package_version, hook.hook
             )),
             crate::hooks::HookDisposition::Empty => notes.push(format!(
-                "Install hook `{}` in {}@{} has an empty body.",
-                hook.hook, hook.package_name, hook.package_version
+                "Package {}@{} install hook `{}` has an empty body.",
+                hook.package_name, hook.package_version, hook.hook
             )),
             crate::hooks::HookDisposition::Unverified | crate::hooks::HookDisposition::FlagOnly => {
                 violations.push(Violation {
@@ -428,8 +428,8 @@ fn consider_install_scripts(
                     configured_action: Action::Review,
                     effective_action: Action::Review,
                     message: format!(
-                        "Install-Hook `{}` in {}@{} verweist auf ein nicht lesbares Ziel und braucht ein Review.",
-                        hook.hook, hook.package_name, hook.package_version
+                        "Package {}@{} install hook `{}` points at a target that could not be read and needs review.",
+                        hook.package_name, hook.package_version, hook.hook
                     ),
                 });
             }
@@ -489,13 +489,13 @@ fn outbound_action(configured: Action, rule_id: &str) -> Action {
 fn outbound_message(finding: &HeuristicFinding) -> String {
     if finding.rule_id == "LW-H004" {
         format!(
-            "Hook `{}` in {}@{} führt heruntergeladenen Inhalt in einer Shell aus ({}).",
-            finding.hook, finding.package_name, finding.package_version, finding.rule_id
+            "Package {}@{} hook `{}` pipes downloaded content into a shell ({}).",
+            finding.package_name, finding.package_version, finding.hook, finding.rule_id
         )
     } else {
         format!(
-            "Hook `{}` in {}@{} lädt während der Installation aus dem Netz, ohne den Inhalt auszuführen ({}).",
-            finding.hook, finding.package_name, finding.package_version, finding.rule_id
+            "Package {}@{} hook `{}` downloads during install and does not execute the content ({}).",
+            finding.package_name, finding.package_version, finding.hook, finding.rule_id
         )
     }
 }
@@ -506,12 +506,12 @@ fn consider_execution(heuristics: &[HeuristicFinding], violations: &mut Vec<Viol
     for finding in heuristics {
         let message = match finding.rule_id {
             "LW-H001" | "LW-H002" => format!(
-                "Hook `{}` in {}@{} enthält starke Obfuskation ({}).",
-                finding.hook, finding.package_name, finding.package_version, finding.rule_id
+                "Package {}@{} hook `{}` contains strong obfuscation ({}).",
+                finding.package_name, finding.package_version, finding.hook, finding.rule_id
             ),
             "LW-H005" => format!(
-                "Hook `{}` in {}@{} führt einen Shell- oder Kindprozess aus ({}).",
-                finding.hook, finding.package_name, finding.package_version, finding.rule_id
+                "Package {}@{} hook `{}` starts a shell or a child process ({}).",
+                finding.package_name, finding.package_version, finding.hook, finding.rule_id
             ),
             _ => continue,
         };
@@ -541,8 +541,7 @@ fn consider_new_dependencies(
     }
     let Some(baseline) = baseline else {
         notes.push(
-            "new_dependencies: keine Baseline übergeben, die Regel ist für diesen Lauf inaktiv."
-                .to_owned(),
+            "new_dependencies is inactive for this run because no baseline was passed.".to_owned(),
         );
         return;
     };
@@ -560,7 +559,7 @@ fn consider_new_dependencies(
             configured_action: rule.action,
             effective_action: rule.action,
             message: format!(
-                "Direkte Abhängigkeit {}@{} fehlt in der Baseline und braucht ein Review.",
+                "Package {}@{} is a new direct dependency and is not in the baseline.",
                 node.name, node.version
             ),
         });
@@ -590,10 +589,10 @@ fn consider_vulnerabilities(
                 configured_action: rule.action,
                 effective_action: rule.action,
                 message: format!(
-                    "Bekannte Schwachstelle {} in {}@{} hat die Schwere {} (Schwelle {}).",
-                    advisory.id,
+                    "Package {}@{} matches advisory {} at severity {} (threshold {}).",
                     package.name,
                     package.version,
+                    advisory.id,
                     advisory.severity.label(),
                     rule.min_severity.label()
                 ),
@@ -620,10 +619,7 @@ fn consider_advisory_coverage(
             subject: String::new(),
             configured_action: rule.action,
             effective_action: rule.action,
-            message: format!(
-                "{} Pakete nicht gegen OSV geprüft (offline, kein/stale Cache).",
-                advisories.cache_misses
-            ),
+            message: coverage_message(advisories.cache_misses),
         });
     }
 }
@@ -650,8 +646,8 @@ fn consider_secrets(
             configured_action: rule.action,
             effective_action: rule.action,
             message: format!(
-                "Hook `{}` in {}@{} greift auf einen Secret-Pfad oder eine Secret-Variable zu.",
-                finding.hook, finding.package_name, finding.package_version
+                "Package {}@{} hook `{}` reads a secret path or a secret variable.",
+                finding.package_name, finding.package_version, finding.hook
             ),
         });
     }
@@ -715,6 +711,27 @@ fn exit_code(mode: Mode, violations: &[Violation]) -> u8 {
             }
         }
     }
+}
+
+/// `1 package` for one, and `0 packages` or `2 packages` otherwise.
+#[must_use]
+pub fn count_label(count: usize, singular: &str, plural: &str) -> String {
+    if count == 1 {
+        format!("1 {singular}")
+    } else {
+        format!("{count} {plural}")
+    }
+}
+
+fn coverage_message(misses: usize) -> String {
+    format!(
+        "{} (offline, no cache entry or a stale cache).",
+        count_label(
+            misses,
+            "package was not checked against OSV",
+            "packages were not checked against OSV",
+        )
+    )
 }
 
 fn violation_order(left: &Violation, right: &Violation) -> std::cmp::Ordering {
@@ -858,7 +875,7 @@ mod tests {
             .expect("coverage violation");
         assert_eq!(
             coverage.message,
-            "2 Pakete nicht gegen OSV geprüft (offline, kein/stale Cache)."
+            "2 packages were not checked against OSV (offline, no cache entry or a stale cache)."
         );
         assert!(decision.notes.iter().all(|note| note != &coverage.message));
     }
@@ -900,7 +917,7 @@ mod tests {
         assert_eq!(decision.outcome, Outcome::Warn);
         assert_eq!(decision.violations[0].configured_action, Action::Fail);
         assert_eq!(decision.violations[0].effective_action, Action::Warn);
-        assert!(decision.notes.iter().any(|note| note.contains("Baseline")));
+        assert!(decision.notes.iter().any(|note| note.contains("baseline")));
     }
 
     #[test]
@@ -1296,6 +1313,22 @@ rules:
         rows.sort_by(violation_order);
         assert_eq!(rows[0].subject, "postinstall\nLW-H003");
         assert_eq!(rows[1].subject, "postinstall\nLW-H004");
+    }
+
+    #[test]
+    fn coverage_counts_use_singular_only_for_one() {
+        assert_eq!(
+            coverage_message(0),
+            "0 packages were not checked against OSV (offline, no cache entry or a stale cache)."
+        );
+        assert_eq!(
+            coverage_message(1),
+            "1 package was not checked against OSV (offline, no cache entry or a stale cache)."
+        );
+        assert_eq!(
+            coverage_message(2),
+            "2 packages were not checked against OSV (offline, no cache entry or a stale cache)."
+        );
     }
 
     #[test]

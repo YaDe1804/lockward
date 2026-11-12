@@ -46,24 +46,24 @@ fn render_markdown(analysis: &Analysis, scanned_at: &str) -> String {
     let mut out = String::new();
     out.push_str("## Lockward\n\n");
     out.push_str(&format!(
-        "**Ziel:** {}\n\n",
+        "**Target:** {}\n\n",
         markdown_span(&analysis.project_root.display().to_string())
     ));
-    out.push_str(&format!("**Zeitpunkt:** {scanned_at}\n\n"));
+    out.push_str(&format!("**Scanned at:** {scanned_at}\n\n"));
     out.push_str(&format!(
         "**Score:** {} ({})\n\n",
         analysis.score.project_score,
         analysis.score.project_severity.label()
     ));
     out.push_str(&format!(
-        "**Gate:** {} · Exit {} · Modus {}\n\n",
+        "**Gate:** {} · Exit {} · mode {}\n\n",
         analysis.decision.outcome.label(),
         analysis.decision.exit_code,
         analysis.decision.mode.label()
     ));
-    out.push_str("### Warum\n\n");
+    out.push_str("### Why\n\n");
     if analysis.score.packages.is_empty() && analysis.decision.violations.is_empty() {
-        out.push_str("Keine bewerteten Funde.\n\n");
+        out.push_str("No scored findings.\n\n");
     } else {
         for package in &analysis.score.packages {
             for explanation in &package.explanations {
@@ -79,9 +79,9 @@ fn render_markdown(analysis: &Analysis, scanned_at: &str) -> String {
         }
         out.push('\n');
     }
-    out.push_str("### Install-Hooks\n\n");
+    out.push_str("### Install hooks\n\n");
     if analysis.hooks.findings.is_empty() {
-        out.push_str("Keine Install-Hooks.\n\n");
+        out.push_str("No install hooks.\n\n");
     } else {
         for hook in &analysis.hooks.findings {
             out.push_str(&format!(
@@ -107,7 +107,7 @@ fn render_markdown(analysis: &Analysis, scanned_at: &str) -> String {
         })
         .collect();
     if advisories.is_empty() {
-        out.push_str("Keine bekannten Advisories im Cache.\n");
+        out.push_str("No advisories in the cache.\n");
     } else {
         for (package, advisory) in advisories {
             out.push_str(&format!(
@@ -120,7 +120,7 @@ fn render_markdown(analysis: &Analysis, scanned_at: &str) -> String {
         }
     }
     if !analysis.decision.notes.is_empty() {
-        out.push_str("\n### Hinweise\n\n");
+        out.push_str("\n### Notes\n\n");
         for note in &analysis.decision.notes {
             out.push_str(&format!("- {}\n", markdown_span(note)));
         }
@@ -132,7 +132,7 @@ fn render_summary(analysis: &Analysis, scanned_at: &str) -> String {
     let mut out = String::new();
     out.push_str("### Lockward\n\n");
     out.push_str(&format!(
-        "Score **{}** ({}) · Gate **{}** (Exit {}, Modus {}) · {scanned_at}\n\n",
+        "Score **{}** ({}) · Gate **{}** (Exit {}, mode {}) · {scanned_at}\n\n",
         analysis.score.project_score,
         analysis.score.project_severity.label(),
         analysis.decision.outcome.label(),
@@ -140,7 +140,7 @@ fn render_summary(analysis: &Analysis, scanned_at: &str) -> String {
         analysis.decision.mode.label()
     ));
     if analysis.decision.violations.is_empty() {
-        out.push_str("Keine Policy-Verstöße.\n");
+        out.push_str("No policy findings.\n");
     } else {
         for violation in &analysis.decision.violations {
             out.push_str(&format!(
@@ -762,7 +762,7 @@ mod tests {
             .lines()
             .find(|line| line.contains("second-line"))
             .expect("hook line");
-        assert_eq!(hook_line.matches('`').count(), 8, "{hook_line}");
+        assert_eq!(hook_line.matches('`').count(), 2, "{hook_line}");
         let json = render(&analysis, ReportKind::Json, GOLDEN_TIMESTAMP).unwrap();
         assert!(json.contains("second-line"));
         assert!(json.contains("<script>"));

