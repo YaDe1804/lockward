@@ -1,5 +1,7 @@
 # ADR 001 — Sprache, Workspace und CLI-Sprache
 
+> **Superseded in part by [ADR 016](016-english-only-output.md).** The decision that human-readable output is German no longer applies. The workspace, Rust toolchain, `unsafe` ban, and release-signing decisions in this ADR still stand.
+
 ## Kontext
 
 Phase 1 braucht eine einzelne Binary, die in CI deterministisch läuft. Gewählt sind Rust, ein offener Core und npm zuerst.
