@@ -7,8 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-12
+
 ### Security
 
+- Hook analysis no longer treats a trusted command as a trusted build when
+  the arguments run shell code (`$(...)`, backticks, process substitution,
+  subshells, brace groups, here-documents, and `eval` / `source` / `.`).
+  A package that is not the publisher of a trusted command, and that declares
+  that command's `bin` under a different case or with a `.cmd`, `.exe`, or
+  `.bat` suffix, is reported as `bin_shadow`.
 - Updated `rustls` to 0.23.46, `rustls-webpki` to 0.103.16,
   `webpki-root-certs` to 1.0.12, and `tokio` to 1.54.1
   (RUSTSEC-2026-0346, RUSTSEC-2026-0347, RUSTSEC-2026-0348,
@@ -126,6 +134,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - JSON paths are normalized the same way on Windows and Linux. Base64 and
   `Function` heuristics match more tightly. UTC timestamps use the `time` crate.
 
-[Unreleased]: https://github.com/YaDe1804/lockward/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/YaDe1804/lockward/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/YaDe1804/lockward/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/YaDe1804/lockward/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/YaDe1804/lockward/releases/tag/v0.1.0
