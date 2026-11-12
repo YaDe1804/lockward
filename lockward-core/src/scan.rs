@@ -4,7 +4,7 @@
 
 use crate::advisories::{AdvisoryCache, HttpTransport, OsvClient, package_queries};
 use crate::heuristics::evaluate;
-use crate::hooks::detect_hooks;
+use crate::hooks::{bin_shadows, detect_hooks};
 use crate::ingest::{Lockfile, parse_lockfile};
 use crate::policy::{Decision, Evaluation, Policy, decide, known_downloader};
 use crate::resolve::{Graph, resolve};
@@ -102,7 +102,8 @@ pub fn analyze<T: HttpTransport>(
     }
     let advisories = client.query(&package_queries(&lock))?;
     let score = score(&lock, &advisories, &heuristics);
-    let decision = decide(
+    let shadows = bin_shadows(&lock.packages);
+    let mut decision = decide(
         &options.policy,
         Evaluation {
             graph: &graph,
@@ -110,8 +111,12 @@ pub fn analyze<T: HttpTransport>(
             heuristics: &heuristics,
             advisories: &advisories,
             baseline: options.baseline.as_ref(),
+            bin_shadows: &shadows,
         },
     );
+    decision.notes.extend(advisories.warnings.iter().cloned());
+    decision.notes.sort();
+    decision.notes.dedup();
     Ok(Analysis {
         lock,
         lock_path,
@@ -128,6 +133,7 @@ pub fn analyze<T: HttpTransport>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hooks::HookDisposition;
     use crate::policy::{Mode, Policy};
     use crate::{Error, Result};
     use serde_json::Value;
@@ -167,5 +173,191 @@ mod tests {
         assert_eq!(analysis.decision.mode, Mode::Warn);
         assert_eq!(analysis.decision.exit_code, 1);
         assert!(!analysis.hooks.findings.is_empty());
+    }
+
+    struct EmptyBatch;
+
+    impl HttpTransport for EmptyBatch {
+        fn post_json(&self, url: &str, body: &Value) -> Result<Value> {
+            assert!(url.ends_with("/v1/querybatch"), "{url}");
+            let queries = body["queries"].as_array().map(Vec::len).unwrap_or(0);
+            Ok(serde_json::json!({ "results": vec![serde_json::json!({}); queries] }))
+        }
+
+        fn get_json(&self, url: &str) -> Result<Value> {
+            Err(Error::Advisory {
+                url: url.to_owned(),
+                message: "unexpected detail fetch".to_owned(),
+            })
+        }
+    }
+
+    #[test]
+    fn cache_write_failure_is_a_note_and_the_scan_stays_valid() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/report/mini");
+        let cache = std::env::temp_dir().join(format!("lockward-scan-ro-{}", std::process::id()));
+        let _ = std::fs::remove_file(&cache);
+        std::fs::write(&cache, b"not a directory").unwrap();
+        let analysis = analyze(
+            &root,
+            &EmptyBatch,
+            &AnalyzeOptions {
+                offline: false,
+                cache_dir: Some(cache.clone()),
+                policy: Policy::default_policy().unwrap(),
+                baseline: None,
+            },
+        )
+        .expect("a cache write must not fail the scan");
+        assert!(
+            analysis
+                .decision
+                .notes
+                .iter()
+                .any(|note| note.contains("advisory cache write failed")),
+            "{:?}",
+            analysis.decision.notes
+        );
+        std::fs::remove_file(&cache).unwrap();
+    }
+
+    fn scan_lock(lock: &str, manifests: &[(&str, &str)]) -> Analysis {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "lockward-bin-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("package-lock.json"), lock).unwrap();
+        for (relative, body) in manifests {
+            let path = dir.join(relative);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, body).unwrap();
+        }
+        let analysis = analyze(
+            &dir,
+            &OfflineOnly,
+            &AnalyzeOptions {
+                offline: true,
+                cache_dir: None,
+                policy: Policy::default_policy().unwrap(),
+                baseline: None,
+            },
+        )
+        .expect("scan");
+        let _ = std::fs::remove_dir_all(&dir);
+        analysis
+    }
+
+    #[test]
+    fn foreign_package_bin_shadows_node_gyp() {
+        let analysis = scan_lock(
+            r#"{
+              "name": "app",
+              "version": "1.0.0",
+              "lockfileVersion": 3,
+              "packages": {
+                "": { "name": "app", "version": "1.0.0" },
+                "node_modules/native": { "version": "1.0.0" },
+                "node_modules/evil": {
+                  "name": "evil",
+                  "version": "9.9.9",
+                  "bin": { "node-gyp": "bin/node-gyp.js" }
+                }
+              }
+            }"#,
+            &[(
+                "node_modules/native/package.json",
+                r#"{"name":"native","version":"1.0.0","scripts":{"install":"node-gyp rebuild"}}"#,
+            )],
+        );
+        let hook = analysis
+            .hooks
+            .findings
+            .iter()
+            .find(|finding| finding.package_name == "native")
+            .expect("native hook");
+        assert_eq!(hook.disposition, HookDisposition::Unverified);
+        assert!(
+            analysis
+                .decision
+                .violations
+                .iter()
+                .any(|hit| hit.rule == "bin_shadow" && hit.package_name == "evil"),
+            "{:?}",
+            analysis.decision.violations
+        );
+    }
+
+    #[test]
+    fn publisher_node_gyp_bin_is_not_a_finding() {
+        let analysis = scan_lock(
+            r#"{
+              "name": "app",
+              "version": "1.0.0",
+              "lockfileVersion": 3,
+              "packages": {
+                "": { "name": "app", "version": "1.0.0" },
+                "node_modules/node-gyp": {
+                  "version": "10.2.0",
+                  "bin": { "node-gyp": "bin/node-gyp.js" }
+                }
+              }
+            }"#,
+            &[(
+                "node_modules/node-gyp/package.json",
+                r#"{"name":"node-gyp","version":"10.2.0","scripts":{"install":"node-gyp rebuild"}}"#,
+            )],
+        );
+        let hook = analysis
+            .hooks
+            .findings
+            .iter()
+            .find(|finding| finding.package_name == "node-gyp")
+            .expect("node-gyp hook");
+        assert_eq!(hook.disposition, HookDisposition::TrustedBuild);
+        assert!(
+            analysis
+                .decision
+                .violations
+                .iter()
+                .all(|hit| hit.rule != "bin_shadow")
+        );
+    }
+
+    #[test]
+    fn missing_bin_field_keeps_trusted_build() {
+        let analysis = scan_lock(
+            r#"{
+              "name": "app",
+              "version": "1.0.0",
+              "lockfileVersion": 3,
+              "packages": {
+                "": { "name": "app", "version": "1.0.0" },
+                "node_modules/native": { "version": "1.0.0" }
+              }
+            }"#,
+            &[(
+                "node_modules/native/package.json",
+                r#"{"name":"native","version":"1.0.0","scripts":{"install":"node-gyp rebuild"}}"#,
+            )],
+        );
+        let hook = analysis
+            .hooks
+            .findings
+            .iter()
+            .find(|finding| finding.package_name == "native")
+            .expect("native hook");
+        assert_eq!(hook.disposition, HookDisposition::TrustedBuild);
+        assert!(
+            analysis
+                .decision
+                .violations
+                .iter()
+                .all(|hit| hit.rule != "bin_shadow")
+        );
     }
 }

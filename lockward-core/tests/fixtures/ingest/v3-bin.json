@@ -1,0 +1,28 @@
+{
+  "name": "bin-app",
+  "version": "1.0.0",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {
+    "": {
+      "name": "bin-app",
+      "version": "1.0.0"
+    },
+    "node_modules/node-gyp": {
+      "version": "10.2.0",
+      "resolved": "https://registry.npmjs.org/node-gyp/-/node-gyp-10.2.0.tgz",
+      "integrity": "sha512-fixture",
+      "bin": {
+        "node-gyp": "bin/node-gyp.js"
+      }
+    },
+    "node_modules/@mapbox/node-pre-gyp": {
+      "version": "1.0.11",
+      "bin": "bin/node-pre-gyp"
+    },
+    "node_modules/prebuildify": {
+      "version": "6.0.1",
+      "bin": "bin.js"
+    }
+  }
+}

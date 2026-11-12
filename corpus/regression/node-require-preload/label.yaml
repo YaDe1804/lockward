@@ -1,0 +1,4 @@
+expected: malicious
+expected_rules: [no_outbound_build]
+source: "Node preload install hook — reconstructed pattern, inert payload"
+notes: "postinstall is node --require ./setup.js install.js. The curl pattern is a comment in both files. Lockward reads them and does not execute them."

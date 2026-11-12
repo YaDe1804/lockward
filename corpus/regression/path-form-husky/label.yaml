@@ -1,0 +1,4 @@
+expected: malicious
+expected_rules: [no_outbound_build]
+source: "Path-form install hook — reconstructed pattern, inert payload"
+notes: "postinstall is ./husky. The curl pattern is a comment in that file. Lockward reads it and does not execute it."

@@ -16,3 +16,5 @@ rules:
     action: fail
   advisory_coverage:
     action: allow
+  bin_shadow:
+    action: fail

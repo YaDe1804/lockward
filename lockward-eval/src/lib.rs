@@ -55,6 +55,9 @@ pub enum Error {
     /// The report could not be encoded.
     #[error("Report konnte nicht geschrieben werden: {0}")]
     Report(String),
+    /// A regression case did not fail the scan.
+    #[error("Regressionsfall {case} ist {severity}, erwartet fail")]
+    Regression { case: String, severity: String },
 }
 
 /// Confusion matrix at case level.
@@ -151,7 +154,7 @@ pub struct CaseResult {
     pub notes: Option<String>,
 }
 
-/// Counts of `fail`, `review`, and `info` across every case.
+/// Counts of `fail`, `review`, and `info` across the scored cases.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SeverityCounts {
     /// Execution, obfuscation, secrets, or a high known vulnerability.
@@ -173,6 +176,21 @@ pub struct CohortStats {
     pub flagged: u32,
     /// `flagged / cases` for benign buckets. `n/a` for malicious.
     pub false_positive_rate: String,
+}
+
+/// One regression case. These are measured and excluded from the metrics.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RegressionCase {
+    /// `regression/<name>`.
+    pub id: String,
+    /// Must be `fail`. Any other severity aborts the eval run.
+    pub severity: String,
+    /// At least one detection-set rule fired.
+    pub flagged: bool,
+    /// Detection-set rules that fired.
+    pub fired: Vec<String>,
+    /// Expected rules absent from `fired`.
+    pub missing_rules: Vec<String>,
 }
 
 /// Machine-readable corpus report.
@@ -202,8 +220,10 @@ pub struct Report {
     pub false_positives: Vec<FalsePositive>,
     /// Flag rates split by cohort. Held-out is not used to extend the allowlist.
     pub cohorts: Vec<CohortStats>,
-    /// Every case, sorted by id.
+    /// Every scored case, sorted by id. Regression cases are not included.
     pub cases: Vec<CaseResult>,
+    /// Hook-bypass fixtures. They must fail and do not enter the metrics.
+    pub regression: Vec<RegressionCase>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -251,7 +271,29 @@ pub fn evaluate(corpus_dir: &Path, policy_path: &Path) -> Result<Report, Error> 
         }
     }
     cases.sort_by(|left, right| left.id.cmp(&right.id));
-    Ok(assemble(policy_name, cases))
+    let regression_dir = corpus_dir.join("regression");
+    if !regression_dir.is_dir() {
+        return Err(Error::Missing(regression_dir.display().to_string()));
+    }
+    let mut regression = Vec::new();
+    for case_dir in read_case_dirs(&regression_dir)? {
+        let case = evaluate_case(&case_dir, "regression", &policy)?;
+        if case.severity != "fail" {
+            return Err(Error::Regression {
+                case: case.id,
+                severity: case.severity,
+            });
+        }
+        regression.push(RegressionCase {
+            id: case.id,
+            severity: case.severity,
+            flagged: case.flagged,
+            fired: case.fired,
+            missing_rules: case.missing_rules,
+        });
+    }
+    regression.sort_by(|left, right| left.id.cmp(&right.id));
+    Ok(assemble(policy_name, cases, regression))
 }
 
 /// Render the German summary, including every FN and FP.
@@ -390,6 +432,37 @@ pub fn render_text(report: &Report) -> String {
         );
     }
     push(&mut out, "");
+    push(
+        &mut out,
+        "Regressionen (nicht in Precision, Recall, F1 und FP-Rate)",
+    );
+    if report.regression.is_empty() {
+        push(&mut out, "(keine)");
+    }
+    for case in &report.regression {
+        push(
+            &mut out,
+            &format!(
+                "- {}  {}  fired=[{}]",
+                case.id,
+                case.severity,
+                case.fired.join(", ")
+            ),
+        );
+    }
+    let regression_fail = report
+        .regression
+        .iter()
+        .filter(|case| case.severity == "fail")
+        .count();
+    push(
+        &mut out,
+        &format!(
+            "regression_fail        {regression_fail}/{}",
+            report.regression.len()
+        ),
+    );
+    push(&mut out, "");
     push(&mut out, "False positives");
     if report.false_positives.is_empty() {
         push(&mut out, "(keine)");
@@ -438,11 +511,12 @@ fn evaluate_case(
     let name = file_name(case_dir)?;
     let id = format!("{class}/{name}");
     let label = read_label(&case_dir.join("label.yaml"), &id)?;
-    if class == "malicious" {
+    if class == "malicious" || class == "regression" {
         if label.expected != "malicious" {
             return Err(Error::Label {
                 path: id,
-                message: "Verzeichnis malicious erwartet expected: malicious".to_owned(),
+                message: "Verzeichnis malicious oder regression erwartet expected: malicious"
+                    .to_owned(),
             });
         }
     } else if label.expected != "benign" {
@@ -519,7 +593,11 @@ fn evaluate_case(
     })
 }
 
-fn assemble(policy_name: String, cases: Vec<CaseResult>) -> Report {
+fn assemble(
+    policy_name: String,
+    cases: Vec<CaseResult>,
+    regression: Vec<RegressionCase>,
+) -> Report {
     let mut confusion = Confusion {
         tp: 0,
         fp: 0,
@@ -584,7 +662,7 @@ fn assemble(policy_name: String, cases: Vec<CaseResult>) -> Report {
         .collect();
     let cohorts = cohort_stats(&cases);
     Report {
-        schema_version: 3,
+        schema_version: 4,
         severity: severity_counts(&cases),
         scope: SCOPE.to_owned(),
         scope_note: SCOPE_NOTE.to_owned(),
@@ -605,6 +683,7 @@ fn assemble(policy_name: String, cases: Vec<CaseResult>) -> Report {
         false_positives,
         cohorts,
         cases,
+        regression,
     }
 }
 
@@ -812,6 +891,10 @@ mod tests {
         let text = render_text(&first);
         assert!(text.contains("False negatives"));
         assert!(text.contains("False positives"));
+        assert!(text.contains("Regressionen"));
+        assert_eq!(first.regression.len(), 8);
+        assert!(first.regression.iter().all(|case| case.severity == "fail"));
+        assert_eq!(first.cases.len(), 72);
         assert!(text.contains(SCOPE_NOTE));
         assert!(text.contains("FP-Rate nach Kohorte"));
         assert!(text.contains("Fail vs. Review"));
@@ -881,16 +964,47 @@ mod tests {
         assert!(!case("benign/esbuild").flagged);
         assert!(!case("benign/husky").flagged);
         assert!(!case("benign/chromedriver").flagged);
+        assert_eq!(report.cases.len(), 72);
         assert_eq!(report.confusion.tp, 15);
         assert_eq!(report.confusion.fn_count, 1);
         assert_eq!(report.confusion.fp, 2);
         assert_eq!(report.confusion.tn, 54);
+        assert_eq!(report.metrics.precision, "0.8824");
         assert_eq!(report.metrics.recall, "0.9375");
+        assert_eq!(report.metrics.f1, "0.9091");
         assert_eq!(report.metrics.false_positive_rate, "0.0357");
         assert_eq!(case("benign/edgedriver").severity, "review");
         assert_eq!(case("benign/prisma").severity, "review");
         assert_eq!(case("malicious/ua-parser-js-staged").severity, "fail");
         assert_eq!(case("malicious/staged-binary").severity, "fail");
+        assert!(!case("benign/unrs-resolver").flagged);
+        assert_eq!(case("benign/unrs-resolver").cohort, "clean");
+        assert_eq!(case("benign/unrs-resolver").severity, "info");
+        let regression = |id: &str| {
+            report
+                .regression
+                .iter()
+                .find(|item| item.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+        for id in [
+            "regression/path-form-husky",
+            "regression/node-require-preload",
+            "regression/shell-c-node",
+            "regression/bun-entry",
+            "regression/command-subst-husky",
+            "regression/backtick-subst-husky",
+            "regression/quoted-subst-node-gyp",
+            "regression/process-subst-husky",
+        ] {
+            let item = regression(id);
+            assert_eq!(item.severity, "fail", "{id}");
+            assert!(
+                item.missing_rules.is_empty(),
+                "{id}: {:?}",
+                item.missing_rules
+            );
+        }
         assert_eq!(case("malicious/obfuscated-hook").severity, "fail");
         assert_eq!(case("malicious/crypto-stealer-secrets").severity, "fail");
         assert_eq!(case("malicious/shell-out-hook").severity, "fail");
@@ -966,7 +1080,7 @@ mod tests {
     #[test]
     fn fixtures_stay_inert() {
         let root = corpus();
-        for class in ["malicious", "benign"] {
+        for class in ["malicious", "benign", "regression"] {
             for case_dir in read_case_dirs(&root.join(class)).expect("cases") {
                 walk_inert(&case_dir);
             }
@@ -985,14 +1099,16 @@ mod tests {
             let text = fs::read_to_string(&path).expect("utf-8 fixture");
             if name == "package.json" {
                 assert_scripts_inert(&path, &text);
+                continue;
             }
-            if name.ends_with(".js") {
-                assert!(
-                    text.lines().all(inert_js_line),
-                    "{} enthält ausführbaren Code",
-                    path.display()
-                );
+            if name == "package-lock.json" || name == "label.yaml" {
+                continue;
             }
+            assert!(
+                text.lines().all(inert_payload_line),
+                "{} enthält ausführbaren Code",
+                path.display()
+            );
         }
     }
 
@@ -1016,7 +1132,10 @@ mod tests {
                     || body.starts_with("prebuild")
                     || body.starts_with("cmake-js")
                     || body.starts_with("patch-package")
-                    || body.starts_with("npm run "));
+                    || body.starts_with("npm run ")
+                    || body.starts_with("./")
+                    || body.starts_with("sh -c ")
+                    || body.starts_with("bun "));
             assert!(
                 quoted || readable,
                 "{} script {hook} ist kein inerter Marker: {body}",
@@ -1025,10 +1144,11 @@ mod tests {
         }
     }
 
-    fn inert_js_line(line: &str) -> bool {
+    fn inert_payload_line(line: &str) -> bool {
         let trimmed = line.trim();
         trimmed.is_empty()
             || trimmed.starts_with("//")
+            || trimmed.starts_with('#')
             || trimmed == "console.log(\"LOCKWARD_EVAL_FIXTURE\");"
     }
 }

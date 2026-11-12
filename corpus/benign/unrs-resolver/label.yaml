@@ -1,5 +1,5 @@
 expected: benign
 expected_rules: []
-cohort: trusted_build
-source: "unrs-resolver — legitimer nativer Build, nicht auf der Allowlist"
-notes: "Held-out: legitimes Install-Script, Name steht nicht in der kuratierten Allowlist."
+cohort: clean
+source: "unrs-resolver 1.13.0 — veröffentlichtes package.json ohne Install-Hook"
+notes: "Quelle: https://cdn.jsdelivr.net/npm/unrs-resolver@1.13.0/package.json (registry.npmjs.org, gelesen 2026-11-12). scripts sind fmt, test und build. napi-postinstall ist eine Dependency, kein postinstall."

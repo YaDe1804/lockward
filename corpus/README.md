@@ -9,9 +9,11 @@ ohne Advisory-Cache bleibt `known_vulnerable` leer.
 - Kein echter Schadcode, keine Malware-Tarballs, kein Download, keine Ausführung.
 - Lockward liest die Dateien nur statisch (Mode 1).
 - Install-Hooks sind entweder `node -e "console.log('LOCKWARD_EVAL_FIXTURE …')"`
-  (Muster im String) oder ein literales Build-Kommando bzw. `node <datei>`.
-  Weder `sh` noch `cmd` starten `curl`, `wget` oder eine Pipe.
-- Zusätzliche `.js`-Dateien enthalten nur Kommentare und
+  (Muster im String), ein literales Build-Kommando, `node <datei>`,
+  `node --require <datei> <datei>`, `./<datei>`, `sh -c 'node <datei>'`
+  oder `bun <datei>`. Der Hook-String selbst enthält kein `curl`, kein `wget`
+  und keine Pipe.
+- Zusätzliche Dateien enthalten nur Kommentare (`//` oder `#`) und
   `console.log("LOCKWARD_EVAL_FIXTURE")`. Lockward liest sie, führt sie nicht aus.
 - Die Fälle sind **rekonstruierte Muster** öffentlich dokumentierter Vorfälle,
   keine kopierten Originale.
@@ -26,7 +28,14 @@ corpus/
   eval-policy.yaml
   malicious/<fall>/
   benign/<fall>/
+  regression/<fall>/
 ```
+
+`regression/` hält die behobenen Hook-Formen (`./husky`, `node --require`,
+`sh -c`, `bun`, sowie ein vertrautes Kommando mit `$(...)`, Backticks,
+doppeltem `$(...)` oder `<(...)`). Die Harness misst sie und verlangt `fail`.
+Precision, Recall, F1 und die FP-Rate rechnen nur `malicious/` und `benign/`
+(72 Fälle).
 
 Jeder Fall hat `package-lock.json` (lockfileVersion 3), bei Bedarf
 `package.json` unter `node_modules/…`, und `label.yaml`.

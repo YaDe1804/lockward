@@ -146,6 +146,56 @@ mod tests {
         assert_eq!(severity_from_score(score), super::super::Severity::Medium);
     }
 
+    /// Published FIRST values, copied into this test on 2026-11-12.
+    ///
+    /// - `Roundup(4.02) = 4.1` and `Roundup(4.00) = 4.0`: CVSS v3.1
+    ///   Specification Document, section 7,
+    ///   <https://www.first.org/cvss/v3.1/specification-document>.
+    /// - Impact at or below 0 scores 0: same document, section 7.1. The
+    ///   vector below sets every impact metric to None.
+    /// - Scope Changed, base score 10.0: FIRST examples, Apache log4j
+    ///   CVE-2021-44228, <https://www.first.org/cvss/examples>.
+    /// - Base score 7.0: same page, CVE-2022-41741, v3.1 column.
+    /// - Base score 9.0: CVSS v3.1 Examples revision 2, CVE-2019-7551,
+    ///   <https://www.first.org/cvss/v3-1/cvss-v31-examples_r2.pdf>.
+    /// - Severity at 4.0, 7.0 and 9.0: specification Table 14. The document
+    ///   states that a base score of 4.0 rates Medium. No v3.1 example in
+    ///   those documents publishes a base score of exactly 4.0, so the
+    ///   Medium boundary is the table's own score.
+    #[test]
+    fn first_boundary_scores_match_the_specification() {
+        assert!((roundup(4.02) - 4.1).abs() < f64::EPSILON);
+        assert!((roundup(4.00) - 4.0).abs() < f64::EPSILON);
+
+        let published = [
+            ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H", 10.0),
+            ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N", 0.0),
+            ("CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:H", 7.0),
+            ("CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:H/I:H/A:H", 9.0),
+        ];
+        for (vector, expected) in published {
+            let score = cvss31_base_score(vector).unwrap_or_else(|| {
+                panic!("{vector} was not scored");
+            });
+            assert!(
+                (score - expected).abs() < f64::EPSILON,
+                "{vector} scored {score}, FIRST publishes {expected}"
+            );
+        }
+
+        assert_eq!(severity_from_score(4.0), super::super::Severity::Medium);
+        assert_eq!(severity_from_score(7.0), super::super::Severity::High);
+        assert_eq!(severity_from_score(9.0), super::super::Severity::Critical);
+        assert_eq!(
+            severity_from_score(cvss31_base_score(published[2].0).unwrap()),
+            super::super::Severity::High
+        );
+        assert_eq!(
+            severity_from_score(cvss31_base_score(published[3].0).unwrap()),
+            super::super::Severity::Critical
+        );
+    }
+
     #[test]
     fn rejects_unknown_vectors() {
         assert!(cvss31_base_score("CVSS:2.0/AV:N/AC:L/Au:N/C:P/I:P/A:P").is_none());

@@ -50,9 +50,13 @@ impl FileCache {
 
     /// Return a fresh cached advisory list.
     ///
-    /// `Ok(None)` means missing, unreadable, or stale. Stale entries stay on
-    /// disk until a successful refetch overwrites them. A missing `fetched_at`
-    /// (legacy files) is stale.
+    /// `Ok(None)` means missing, stale, or not valid JSON. Stale entries stay
+    /// on disk until a successful refetch overwrites them. A missing
+    /// `fetched_at` (legacy files) is stale.
+    ///
+    /// `Err` is a read that failed for a reason other than `NotFound`, for
+    /// example `NotADirectory` when the cache path is a file. Callers treat
+    /// that as a miss. They do not abort the scan.
     pub fn get(&self, name: &str, version: &str) -> Result<Option<Vec<Advisory>>> {
         let path = self.path_for(name, version);
         let text = match fs::read_to_string(&path) {
@@ -78,6 +82,10 @@ impl FileCache {
     }
 
     /// Write an advisory list for one package version.
+    ///
+    /// The bytes land in a unique temporary file in the same directory and are
+    /// renamed onto the target. The previous file is not deleted first, so a
+    /// second writer cannot leave the key missing.
     pub fn put(&self, name: &str, version: &str, advisories: &[Advisory]) -> Result<()> {
         fs::create_dir_all(&self.root).map_err(|err| Error::io(&self.root, err))?;
         let path = self.path_for(name, version);
@@ -92,13 +100,16 @@ impl FileCache {
             path: path.display().to_string(),
             source,
         })?;
-        let temporary = path.with_extension("json.tmp");
-        fs::write(&temporary, bytes).map_err(|err| Error::io(&temporary, err))?;
-        if path.exists() {
-            fs::remove_file(&path).map_err(|err| Error::io(&path, err))?;
+        let temporary = temporary_path(&path);
+        let written = (|| {
+            fs::write(&temporary, &bytes).map_err(|err| Error::io(&temporary, err))?;
+            fs::rename(&temporary, &path).map_err(|err| Error::io(&path, err))?;
+            Ok(())
+        })();
+        if written.is_err() {
+            let _ = fs::remove_file(&temporary);
         }
-        fs::rename(&temporary, &path).map_err(|err| Error::io(&path, err))?;
-        Ok(())
+        written
     }
 
     /// Write an entry with an explicit timestamp. Tests use this to plant stale files.
@@ -136,6 +147,16 @@ impl FileCache {
         self.root
             .join(format!("{}.json", hex::encode(hasher.finalize())))
     }
+}
+
+/// A temp file in the same directory as `target`. The name is unique per
+/// attempt so two `put` calls cannot truncate each other's bytes.
+fn temporary_path(target: &Path) -> PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let file_name = target.file_name().unwrap_or_default().to_string_lossy();
+    target.with_file_name(format!(".{file_name}.{}.{n}.tmp", std::process::id()))
 }
 
 fn now_unix() -> u64 {
@@ -176,6 +197,40 @@ mod tests {
         assert_eq!(parsed.fetched_at, 0);
         assert!(cache.get("left-pad", "1.0.0").unwrap().is_none());
         assert!(path.exists(), "a stale legacy file is not deleted");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn concurrent_puts_and_gets_never_tear_or_drop_the_entry() {
+        let (dir, cache) = temp_cache("concurrent");
+        let advisory = crate::advisories::Advisory {
+            id: "GHSA-lock-ward-test".to_owned(),
+            aliases: vec!["CVE-2020-0001".to_owned()],
+            summary: "fixture".to_owned(),
+            severity: crate::advisories::Severity::Low,
+            cvss_score: Some("3.1".to_owned()),
+            url: "https://example.invalid/advisory".to_owned(),
+        };
+        cache
+            .put("left-pad", "1.0.0", std::slice::from_ref(&advisory))
+            .unwrap();
+        std::thread::scope(|scope| {
+            for _ in 0..8 {
+                scope.spawn(|| {
+                    for _ in 0..50 {
+                        cache
+                            .put("left-pad", "1.0.0", std::slice::from_ref(&advisory))
+                            .unwrap();
+                        let got = cache.get("left-pad", "1.0.0").expect("cache read");
+                        assert_eq!(
+                            got.as_deref(),
+                            Some(std::slice::from_ref(&advisory)),
+                            "cache entry was missing or partial"
+                        );
+                    }
+                });
+            }
+        });
         let _ = fs::remove_dir_all(&dir);
     }
 

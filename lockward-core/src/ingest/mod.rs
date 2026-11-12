@@ -65,6 +65,11 @@ pub struct Package {
     pub optional_dependencies: BTreeMap<String, String>,
     /// Peer dependency ranges.
     pub peer_dependencies: BTreeMap<String, String>,
+    /// npm `bin` commands this package declares, command name to relative path.
+    ///
+    /// A string `bin` uses the package name, with a scope stripped, matching
+    /// npm's package.json shorthand and `normalize-package-data`.
+    pub bins: BTreeMap<String, String>,
 }
 
 /// Largest lockfile that will be read (32 MiB).
@@ -194,7 +199,7 @@ fn normalize_package(
 
     Ok(Package {
         path: path.to_owned(),
-        name,
+        name: name.clone(),
         version,
         resolved: package.resolved,
         integrity: package.integrity,
@@ -208,7 +213,45 @@ fn normalize_package(
         dev_dependencies: package.dev_dependencies.unwrap_or_default(),
         optional_dependencies: package.optional_dependencies.unwrap_or_default(),
         peer_dependencies: package.peer_dependencies.unwrap_or_default(),
+        bins: normalize_bins(package.bin, &name),
     })
+}
+
+/// npm copies `bin` from `package.json` into the lockfile package descriptor.
+///
+/// The object form is the shape current npm writes. A string is the
+/// package.json shorthand: the command name is the package name, and a scoped
+/// name keeps only the part after `/` (`@mapbox/node-pre-gyp` → `node-pre-gyp`).
+/// That is `normalize-package-data`'s `fixBinField` and the basename step in
+/// `@npmcli/package-json`.
+fn normalize_bins(bin: Option<RawBin>, package_name: &str) -> BTreeMap<String, String> {
+    let mut bins = BTreeMap::new();
+    match bin {
+        None => {}
+        Some(RawBin::Path(path)) => {
+            if let Some(command) = installed_bin_name(package_name) {
+                bins.insert(command, path);
+            }
+        }
+        Some(RawBin::Map(entries)) => {
+            for (command, path) in entries {
+                if let Some(command) = installed_bin_name(&command) {
+                    bins.insert(command, path);
+                }
+            }
+        }
+    }
+    bins
+}
+
+fn installed_bin_name(raw: &str) -> Option<String> {
+    let cleaned = raw.replace(['\\', ':'], "/");
+    let base = cleaned.rsplit('/').next().unwrap_or("").trim();
+    if base.is_empty() {
+        None
+    } else {
+        Some(base.to_ascii_lowercase())
+    }
 }
 
 /// Derive `@scope/name` or `name` from a lockfile package path.
@@ -263,6 +306,14 @@ struct RawPackage {
     optional_dependencies: Option<BTreeMap<String, String>>,
     #[serde(rename = "peerDependencies")]
     peer_dependencies: Option<BTreeMap<String, String>>,
+    bin: Option<RawBin>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum RawBin {
+    Path(String),
+    Map(BTreeMap<String, String>),
 }
 
 #[derive(Debug, Deserialize)]
@@ -381,6 +432,54 @@ mod tests {
         assert_eq!(
             foo.dependencies.get("bar").map(String::as_str),
             Some("^2.0.0")
+        );
+    }
+
+    #[test]
+    fn lockfile_bin_is_read_for_v2_and_v3() {
+        let v3 = parse_lockfile_str(&fixture("v3-bin.json"), "v3-bin.json").unwrap();
+        assert_eq!(v3.lockfile_version, 3);
+        let node_gyp = v3
+            .packages
+            .iter()
+            .find(|package| package.name == "node-gyp")
+            .unwrap();
+        assert_eq!(
+            node_gyp.bins.get("node-gyp").map(String::as_str),
+            Some("bin/node-gyp.js")
+        );
+        let scoped = v3
+            .packages
+            .iter()
+            .find(|package| package.name == "@mapbox/node-pre-gyp")
+            .unwrap();
+        assert_eq!(
+            scoped.bins.get("node-pre-gyp").map(String::as_str),
+            Some("bin/node-pre-gyp"),
+            "a string bin on a scoped package uses the unscoped name"
+        );
+        let prebuildify = v3
+            .packages
+            .iter()
+            .find(|package| package.name == "prebuildify")
+            .unwrap();
+        assert_eq!(
+            prebuildify.bins.get("prebuildify").map(String::as_str),
+            Some("bin.js")
+        );
+
+        let v2 = fixture("v3-bin.json").replace("\"lockfileVersion\": 3", "\"lockfileVersion\": 2");
+        let v2 = parse_lockfile_str(&v2, "v2-bin.json").unwrap();
+        assert_eq!(v2.lockfile_version, 2);
+        assert_eq!(
+            v2.packages
+                .iter()
+                .find(|package| package.name == "node-gyp")
+                .unwrap()
+                .bins
+                .get("node-gyp")
+                .map(String::as_str),
+            Some("bin/node-gyp.js")
         );
     }
 

@@ -98,6 +98,14 @@ pub struct AdvisoryReport {
     pub cache_misses: usize,
     /// True when the network was not used.
     pub offline: bool,
+    /// Cache reads or writes that failed. The advisory list is still valid.
+    ///
+    /// A read failure is recorded once for the whole query, not once per package.
+    ///
+    /// Not part of the report document. [`crate::scan::analyze`] copies these
+    /// into the decision notes.
+    #[serde(skip)]
+    pub warnings: Vec<String>,
 }
 
 /// HTTP surface used by the OSV client. Tests supply a fake.
@@ -228,22 +236,35 @@ impl<T: HttpTransport> OsvClient<T> {
         let mut resolved: Vec<Option<Vec<Advisory>>> = vec![None; packages.len()];
         let mut pending = Vec::new();
         let mut cache_hits = 0;
+        let mut warnings = Vec::new();
+        let mut cache_read_failed = false;
 
         for (index, package) in packages.iter().enumerate() {
             // `FileCache::get` returns `None` for a missing or stale entry
             // (`fetched_at` absent or older than the TTL), so those packages
             // stay pending and are queried again when the client is online.
-            if let Some(cache) = &self.cache
-                && let Some(advisories) = cache.get(&package.name, &package.version)?
-            {
-                tracing::debug!(
-                    name = %package.name,
-                    version = %package.version,
-                    "advisory cache hit"
-                );
-                resolved[index] = Some(advisories);
-                cache_hits += 1;
-                continue;
+            // Any other read error is also a miss. It is one warning for the
+            // run, because every key shares the same cache directory.
+            if let Some(cache) = &self.cache {
+                match cache.get(&package.name, &package.version) {
+                    Ok(Some(advisories)) => {
+                        tracing::debug!(
+                            name = %package.name,
+                            version = %package.version,
+                            "advisory cache hit"
+                        );
+                        resolved[index] = Some(advisories);
+                        cache_hits += 1;
+                        continue;
+                    }
+                    Ok(None) => {}
+                    Err(err) => {
+                        if !cache_read_failed {
+                            warnings.push(format!("advisory cache read failed: {err}"));
+                            cache_read_failed = true;
+                        }
+                    }
+                }
             }
             pending.push(index);
         }
@@ -260,7 +281,12 @@ impl<T: HttpTransport> OsvClient<T> {
                 for (index, advisories) in fetched {
                     if let Some(cache) = &self.cache {
                         let package = &packages[index];
-                        cache.put(&package.name, &package.version, &advisories)?;
+                        if let Err(err) = cache.put(&package.name, &package.version, &advisories) {
+                            warnings.push(format!(
+                                "advisory cache write failed for {}@{}: {err}",
+                                package.name, package.version
+                            ));
+                        }
                     }
                     resolved[index] = Some(advisories);
                 }
@@ -283,6 +309,7 @@ impl<T: HttpTransport> OsvClient<T> {
             cache_hits,
             cache_misses,
             offline: self.offline,
+            warnings,
         })
     }
 
@@ -681,6 +708,63 @@ mod tests {
         assert_eq!(second.packages, first.packages);
         assert_eq!(transport.posts.load(Ordering::SeqCst), 1);
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn cache_write_failure_keeps_the_advisory_result() {
+        let path = std::env::temp_dir().join(format!("lockward-osv-ro-{}", std::process::id()));
+        let _ = fs::remove_file(&path);
+        fs::write(&path, b"not a directory").unwrap();
+        let transport = Scripted {
+            posts: AtomicUsize::new(0),
+            gets: AtomicUsize::new(0),
+        };
+        let report = OsvClient::new(&transport)
+            .with_cache(FileCache::new(&path))
+            .query(std::slice::from_ref(&sample()[0]))
+            .expect("a cache write must not fail the query");
+        assert_eq!(report.packages[0].advisories[0].id, "GHSA-35jh-r3h4-6jhm");
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("lodash@4.17.20")),
+            "{:?}",
+            report.warnings
+        );
+        fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn cache_read_failure_is_one_warning_and_counts_as_an_offline_miss() {
+        let path = std::env::temp_dir().join(format!("lockward-osv-read-{}", std::process::id()));
+        let _ = fs::remove_file(&path);
+        fs::write(&path, b"not a directory").unwrap();
+        let cache = FileCache::new(&path);
+        let probed = cache.get("lodash", "4.17.20");
+        let report = OsvClient::new(Failing)
+            .with_cache(cache)
+            .offline(true)
+            .query(&sample())
+            .expect("a cache read must not fail the query");
+        assert_eq!(report.cache_hits, 0);
+        assert_eq!(report.cache_misses, sample().len());
+        assert!(
+            report
+                .packages
+                .iter()
+                .all(|package| package.advisories.is_empty())
+        );
+        let reads = report
+            .warnings
+            .iter()
+            .filter(|warning| warning.contains("advisory cache read failed"))
+            .count();
+        // Windows reports NotFound for a file used as a directory. Linux
+        // reports NotADirectory. Only the latter is a read failure.
+        let expected = usize::from(probed.is_err());
+        assert_eq!(reads, expected, "{:?} {:?}", report.warnings, probed);
+        fs::remove_file(&path).unwrap();
     }
 
     #[test]

@@ -272,6 +272,7 @@ mod tests {
             dev_dependencies: BTreeMap::new(),
             optional_dependencies: BTreeMap::new(),
             peer_dependencies: BTreeMap::new(),
+            bins: BTreeMap::new(),
         }
     }
 
@@ -306,6 +307,7 @@ mod tests {
             cache_hits: 0,
             cache_misses: 0,
             offline: true,
+            warnings: Vec::new(),
         }
     }
 

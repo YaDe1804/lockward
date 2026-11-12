@@ -25,17 +25,22 @@ pub const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
 /// Referenced scripts read per hook. Further references stay unverified.
 pub const MAX_REFERENCED_SCRIPTS: usize = 8;
 
+mod bins;
 mod command;
+
+pub use bins::{BinShadow, bin_shadows, publishers_for};
 
 /// How the hook body was classified. Nothing here is executed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HookDisposition {
-    /// Every command is a known build tool (`node-gyp`, `husky`, …).
+    /// Every command is a known build tool (`node-gyp`, `husky`, …) invoked by bare name.
     TrustedBuild,
     /// The command line and any referenced local files were read.
     Inspected,
-    /// A referenced file could not be read inside the package directory.
+    /// The hook body is empty or only whitespace. npm treats that as a no-op.
+    Empty,
+    /// A referenced file could not be read, or the command is not a known form.
     Unverified,
     /// Lockfile `hasInstallScript` without a manifest body.
     FlagOnly,
@@ -105,6 +110,7 @@ pub fn detect_hooks(lock: &Lockfile, project_root: &Path) -> Result<HookReport> 
 
     let mut findings = Vec::new();
     let mut warnings = Vec::new();
+    let shadowed = bins::shadowed_commands(&lock.packages);
     for package in &lock.packages {
         let manifest_path = match contained_manifest(&canonical_root, project_root, &package.path) {
             Ok(Some(path)) => path,
@@ -126,11 +132,14 @@ pub fn detect_hooks(lock: &Lockfile, project_root: &Path) -> Result<HookReport> 
         match read_manifest(&manifest_path) {
             Ok(Some(value)) => {
                 let found = hooks_from_manifest(
-                    &package.name,
-                    &package.version,
-                    &package.path,
-                    &manifest_path,
-                    &canonical_root,
+                    &HookSource {
+                        name: &package.name,
+                        version: &package.version,
+                        package_path: &package.path,
+                        manifest_path: &manifest_path,
+                        canonical_root: &canonical_root,
+                        shadowed: &shadowed,
+                    },
                     &value,
                     &mut warnings,
                 );
@@ -148,19 +157,27 @@ pub fn detect_hooks(lock: &Lockfile, project_root: &Path) -> Result<HookReport> 
     Ok(HookReport { findings, warnings })
 }
 
+struct HookSource<'a> {
+    name: &'a str,
+    version: &'a str,
+    package_path: &'a str,
+    manifest_path: &'a Path,
+    canonical_root: &'a Path,
+    shadowed: &'a std::collections::BTreeSet<String>,
+}
+
 fn hooks_from_manifest(
-    name: &str,
-    version: &str,
-    package_path: &str,
-    manifest_path: &Path,
-    canonical_root: &Path,
+    source: &HookSource<'_>,
     manifest: &Value,
     warnings: &mut Vec<String>,
 ) -> Vec<HookFinding> {
     let Some(scripts) = manifest.get("scripts").and_then(Value::as_object) else {
         return Vec::new();
     };
-    let package_dir = manifest_path.parent().unwrap_or(manifest_path);
+    let package_dir = source
+        .manifest_path
+        .parent()
+        .unwrap_or(source.manifest_path);
     let mut found = Vec::new();
     for hook in NPM_INSTALL_HOOKS {
         let Some(value) = scripts.get(*hook) else {
@@ -169,7 +186,7 @@ fn hooks_from_manifest(
         let Some(raw) = value.as_str() else {
             warnings.push(format!(
                 "{}: scripts.{hook} is not a string",
-                manifest_path.display()
+                source.manifest_path.display()
             ));
             continue;
         };
@@ -177,19 +194,25 @@ fn hooks_from_manifest(
         if truncated {
             warnings.push(format!(
                 "{}: scripts.{hook} truncated to {MAX_HOOK_CHARS} characters",
-                manifest_path.display()
+                source.manifest_path.display()
             ));
         }
-        let (disposition, extra) =
-            command::resolve_body(&raw, manifest, package_dir, canonical_root, warnings);
+        let (disposition, extra) = command::resolve_body(
+            &raw,
+            manifest,
+            package_dir,
+            source.canonical_root,
+            warnings,
+            source.shadowed,
+        );
         let mut raw = raw;
         raw.push_str(&extra);
         found.push(HookFinding {
-            package_name: name.to_owned(),
-            package_version: version.to_owned(),
-            package_path: package_path.to_owned(),
+            package_name: source.name.to_owned(),
+            package_version: source.version.to_owned(),
+            package_path: source.package_path.to_owned(),
             hook: (*hook).to_owned(),
-            location: format!("{}#scripts.{hook}", manifest_path.display()),
+            location: format!("{}#scripts.{hook}", source.manifest_path.display()),
             raw,
             provenance: HookProvenance::Manifest,
             disposition,

@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 permissions:
@@ -20,6 +22,7 @@ jobs:
 
       - uses: taiki-e/install-action@f360235162158ca4526b07999d99c38ade05a414 # cargo-nextest
       - uses: taiki-e/install-action@977cdbe2e748fc9d5798e3098868c4c4463bf31b # cargo-audit
+      - uses: taiki-e/install-action@98b24ef8830c90613ec3b57343df3abde2b66e56 # cargo-deny
 
       - name: Format
         run: cargo fmt --all -- --check
@@ -32,6 +35,9 @@ jobs:
 
       - name: Audit
         run: cargo audit
+
+      - name: Deny
+        run: cargo deny check
 
       - name: CycloneDX 1.6 schema
         run: |
@@ -54,6 +60,23 @@ jobs:
             python3 -m pip install --break-system-packages --disable-pip-version-check check-jsonschema
             check-jsonschema --schemafile target/cdx-schema/bom-1.6.schema.json target/licenses.cdx.json
           fi
+
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+
+      - uses: taiki-e/install-action@f360235162158ca4526b07999d99c38ade05a414 # cargo-nextest
+
+      - name: Test
+        run: cargo nextest run --locked
 
   corpus:
     name: corpus
