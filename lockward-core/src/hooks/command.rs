@@ -21,7 +21,6 @@ use std::path::Path;
 /// Strictly ascending and unique: `trusted_command` searches this slice with
 /// `binary_search`. A path-form `argv[0]` is not looked up here.
 const TRUSTED_COMMANDS: &[&str] = &[
-    "@mapbox/node-pre-gyp",
     "cmake-js",
     "husky",
     "napi-build",
@@ -845,6 +844,22 @@ mod tests {
         serde_json::json!({
             "scripts": { "build": "node install.js", "postinstall": "npm run build" }
         })
+    }
+
+    #[test]
+    fn node_pre_gyp_install_stays_trusted_build() {
+        let root = unique_dir();
+        let (disposition, extra) = resolve_body(
+            "node-pre-gyp install",
+            &manifest(),
+            &root,
+            &root.canonicalize().unwrap(),
+            &mut Vec::new(),
+            &BTreeSet::new(),
+        );
+        assert_eq!(disposition, HookDisposition::TrustedBuild);
+        assert!(extra.is_empty());
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

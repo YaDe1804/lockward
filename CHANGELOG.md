@@ -49,6 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   locked in tests. The formula is unchanged.
 - `KNOWN_DOWNLOADERS` and `TRUSTED_COMMANDS` are checked to stay strictly
   sorted and unique.
+- `@mapbox/node-pre-gyp` is no longer a trusted command name. The token
+  contains `/`, so it was already a path. `node-pre-gyp install` stays a
+  trusted build.
 
 ## [0.1.1] - 2026-10-12
 
