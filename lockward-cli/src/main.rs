@@ -8,7 +8,9 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use lockward_core::advisories::ReqwestTransport;
-use lockward_core::policy::{Mode, Policy, load_policy, parse_baseline, render_baseline};
+use lockward_core::policy::{
+    Mode, Policy, count_label, load_policy, parse_baseline, render_baseline,
+};
 use lockward_core::report::{ReportKind, render};
 use lockward_core::resolve::resolve;
 use lockward_core::scan::{Analysis, AnalyzeOptions, analyze, locate_lockfile};
@@ -21,20 +23,20 @@ use time::OffsetDateTime;
 use time::macros::format_description;
 use tracing_subscriber::EnvFilter;
 
-/// Supply-Chain-Firewall und Backdoor-Risiko-Scanner.
+/// Static supply-chain and backdoor scanner for npm.
 #[derive(Debug, Parser)]
 #[command(
     name = "lockward",
     version,
     long_version = concat!(
         env!("CARGO_PKG_VERSION"),
-        "\nAGPL-3.0, Quellcode: https://github.com/YaDe1804/lockward"
+        "\nAGPL-3.0, source: https://github.com/YaDe1804/lockward"
     ),
-    about = "Supply-Chain-Firewall und Backdoor-Risiko-Scanner",
-    long_about = "Lockward prüft npm-Lockfiles auf bekannte Schwachstellen, Install-Hooks und backdoor-ähnliche Muster. Mode 1 ist rein statisch und führt keinen Paketcode aus.\n\nAGPL-3.0, Quellcode: https://github.com/YaDe1804/lockward"
+    about = "Static supply-chain and backdoor scanner for npm",
+    long_about = "Lockward checks npm lockfiles for known advisories, install hooks, and backdoor-like patterns. Mode 1 is static and does not execute package code.\n\nAGPL-3.0, source: https://github.com/YaDe1804/lockward"
 )]
 struct Cli {
-    /// Erhöht die Log-Ausführlichkeit (`-v` info, `-vv` debug, `-vvv` trace).
+    /// Raise log verbosity (`-v` info, `-vv` debug, `-vvv` trace).
     #[arg(short, long, global = true, action = clap::ArgAction::Count)]
     verbose: u8,
 
@@ -44,40 +46,40 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Scannt ein Repository oder eine `package-lock.json`.
+    /// Scan a repository or a `package-lock.json`.
     Scan {
-        /// Pfad zu einem Projektverzeichnis oder einer `package-lock.json`.
+        /// Path to a project directory or a `package-lock.json`.
         path: PathBuf,
-        /// Nur den lokalen Advisory-Cache verwenden.
+        /// Use only the local advisory cache.
         #[arg(long)]
         offline: bool,
-        /// Verzeichnis für den OSV-Cache.
+        /// Directory for the OSV cache.
         #[arg(long)]
         cache_dir: Option<PathBuf>,
-        /// YAML-Policy. Ohne Angabe gilt die eingebaute Warn-First-Policy.
+        /// YAML policy. The built-in warn-first policy is used when this is omitted.
         #[arg(long)]
         policy: Option<PathBuf>,
-        /// Überschreibt `mode` aus der Policy.
+        /// Override `mode` from the policy.
         #[arg(long, value_enum)]
         mode: Option<CliMode>,
-        /// Baseline-Datei (`name@version` pro Zeile) für neue Abhängigkeiten.
+        /// Baseline file (`name@version` per line) for new dependencies.
         #[arg(long)]
         baseline: Option<PathBuf>,
-        /// Ausgabeformat. `all` schreibt vier Dateien nach `--output`.
+        /// Output format. `all` writes four files into `--output`.
         #[arg(long, value_enum, default_value = "text")]
         format: CliFormat,
-        /// Datei oder Verzeichnis für die gewählte Ausgabe.
+        /// File or directory for the chosen output.
         #[arg(long)]
         output: Option<PathBuf>,
-        /// RFC3339-Zeitstempel. Ohne Angabe wird die aktuelle UTC-Zeit verwendet.
+        /// RFC3339 timestamp. The current UTC time is used when this is omitted.
         #[arg(long)]
         scanned_at: Option<String>,
     },
-    /// Schreibt die direkten Abhängigkeiten als Baseline.
+    /// Write the direct dependencies as a baseline.
     Baseline {
-        /// Pfad zu einem Projektverzeichnis oder einer `package-lock.json`.
+        /// Path to a project directory or a `package-lock.json`.
         path: PathBuf,
-        /// Zieldatei. Ohne Angabe geht die Baseline nach stdout.
+        /// Output file. The baseline goes to stdout when this is omitted.
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
@@ -85,25 +87,25 @@ enum Command {
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum CliFormat {
-    /// Kurze deutsche Zusammenfassung auf stdout.
+    /// Short summary on stdout.
     Text,
-    /// Markdown für einen PR-Kommentar.
+    /// Markdown for a pull-request comment.
     Markdown,
-    /// GitHub Step Summary.
+    /// GitHub step summary.
     Summary,
-    /// Maschinenlesbares JSON.
+    /// Machine-readable JSON.
     Json,
-    /// CycloneDX-1.6-SBOM.
+    /// CycloneDX 1.6 SBOM.
     Cyclonedx,
-    /// Schreibt Kommentar, Summary, JSON und SBOM.
+    /// Write the comment, summary, JSON, and SBOM.
     All,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum CliMode {
-    /// Warn-First: Verstöße werden zu Warnungen, Exit höchstens 1.
+    /// Warn-first: findings become warnings, and the exit code is at most 1.
     Warn,
-    /// Konfigurierte Fail-Regeln beenden den Prozess mit Exit 2.
+    /// Configured fail rules exit 2.
     Enforce,
 }
 
@@ -174,7 +176,7 @@ fn scan(args: ScanArgs) -> Result<u8> {
         scanned_at,
     } = args;
     let mut policy = match policy_path {
-        Some(path) => load_policy(&path).context("Policy konnte nicht geladen werden")?,
+        Some(path) => load_policy(&path).context("could not load the policy")?,
         None => Policy::default_policy().context("Standard-Policy fehlt")?,
     };
     if let Some(mode) = mode {
@@ -185,15 +187,14 @@ fn scan(args: ScanArgs) -> Result<u8> {
     }
     let baseline = match baseline_path {
         Some(path) => {
-            let text = fs::read_to_string(&path).with_context(|| {
-                format!("Baseline {} konnte nicht gelesen werden", path.display())
-            })?;
+            let text = fs::read_to_string(&path)
+                .with_context(|| format!("could not read baseline {}", path.display()))?;
             Some(parse_baseline(&text))
         }
         None => None,
     };
     let cache_dir = Some(cache_dir.unwrap_or_else(default_cache_dir));
-    let transport = ReqwestTransport::new().context("HTTP-Client konnte nicht erzeugt werden")?;
+    let transport = ReqwestTransport::new().context("could not build the HTTP client")?;
     let analysis = analyze(
         &path,
         &transport,
@@ -258,12 +259,10 @@ fn emit_report(
                 CliFormat::Cyclonedx => ReportKind::CycloneDx,
                 CliFormat::Text | CliFormat::All => unreachable!(),
             };
-            let text =
-                render(analysis, kind, scanned_at).context("Report konnte nicht erzeugt werden")?;
+            let text = render(analysis, kind, scanned_at).context("could not render the report")?;
             if let Some(path) = output {
-                fs::write(path, text).with_context(|| {
-                    format!("Report {} konnte nicht geschrieben werden", path.display())
-                })?;
+                fs::write(path, text)
+                    .with_context(|| format!("could not write report {}", path.display()))?;
             } else {
                 print!("{text}");
             }
@@ -278,9 +277,8 @@ fn write_report(
     path: &Path,
     scanned_at: &str,
 ) -> Result<()> {
-    let text = render(analysis, kind, scanned_at).context("Report konnte nicht erzeugt werden")?;
-    fs::write(path, text)
-        .with_context(|| format!("Report {} konnte nicht geschrieben werden", path.display()))
+    let text = render(analysis, kind, scanned_at).context("could not render the report")?;
+    fs::write(path, text).with_context(|| format!("could not write report {}", path.display()))
 }
 
 fn bail_output() -> Result<()> {
@@ -295,17 +293,13 @@ fn utc_now() -> String {
 }
 
 fn write_baseline(path: &Path, output: Option<&Path>) -> Result<()> {
-    let lock_path = locate_lockfile(path).context("package-lock.json nicht gefunden")?;
-    let lock = parse_lockfile(&lock_path).context("Lockfile konnte nicht gelesen werden")?;
+    let lock_path = locate_lockfile(path).context("package-lock.json was not found")?;
+    let lock = parse_lockfile(&lock_path).context("could not read the lockfile")?;
     let text = render_baseline(&resolve(&lock));
     match output {
         Some(path) => {
-            fs::write(path, text).with_context(|| {
-                format!(
-                    "Baseline {} konnte nicht geschrieben werden",
-                    path.display()
-                )
-            })?;
+            fs::write(path, text)
+                .with_context(|| format!("could not write baseline {}", path.display()))?;
         }
         None => {
             let mut stdout = io::stdout().lock();
@@ -319,18 +313,18 @@ fn print_summary(analysis: &Analysis) -> Result<()> {
     let outcome = analysis.decision.outcome.label();
     let mode = analysis.decision.mode.label();
     println!("Lockward {VERSION}");
-    println!("Ziel: {}", analysis.project_root.display());
+    println!("Target: {}", analysis.project_root.display());
     println!(
         "Score: {} ({})",
         analysis.score.project_score,
         analysis.score.project_severity.label()
     );
     println!(
-        "Gate: {outcome} (Exit {}, Modus {mode})",
+        "Gate: {outcome} (exit {}, mode {mode})",
         analysis.decision.exit_code
     );
     println!(
-        "Hooks: {} · Heuristiken: {} · Advisories: {}",
+        "Install hooks: {} · heuristics: {} · advisories: {}",
         analysis.hooks.findings.len(),
         analysis.heuristics.len(),
         analysis
@@ -341,18 +335,23 @@ fn print_summary(analysis: &Analysis) -> Result<()> {
             .sum::<usize>()
     );
     if analysis.advisories.offline && analysis.advisories.cache_misses > 0 {
+        let misses = analysis.advisories.cache_misses;
         println!(
-            "Advisory-Abdeckung: {} Pakete nicht gegen OSV geprüft (offline, kein/stale Cache).",
-            analysis.advisories.cache_misses
+            "Advisory coverage: {} (offline, no cache entry or a stale cache).",
+            count_label(
+                misses,
+                "package was not checked against OSV",
+                "packages were not checked against OSV",
+            )
         );
     }
     for note in &analysis.decision.notes {
-        println!("Hinweis: {note}");
+        println!("Note: {note}");
     }
     if analysis.decision.violations.is_empty() {
-        println!("Keine Policy-Verstöße.");
+        println!("No policy findings.");
     } else {
-        println!("Verstöße:");
+        println!("Findings:");
         for violation in &analysis.decision.violations {
             println!("- [{}] {}", violation.rule, violation.message);
         }

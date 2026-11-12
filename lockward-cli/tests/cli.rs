@@ -16,7 +16,7 @@ fn help_lists_scan() {
         .assert()
         .success()
         .stdout(predicate::str::contains("scan"))
-        .stdout(predicate::str::contains("führt keinen Paketcode aus"));
+        .stdout(predicate::str::contains("does not execute package code"));
 }
 
 #[test]
@@ -43,7 +43,7 @@ fn offline_corpus_exits_with_warning() {
         .stdout(predicate::str::contains("install_scripts"))
         .stdout(predicate::str::contains("advisory_coverage"))
         .stdout(predicate::str::contains(
-            "Pakete nicht gegen OSV geprüft (offline, kein/stale Cache).",
+            "packages were not checked against OSV (offline, no cache entry or a stale cache).",
         ));
 }
 
