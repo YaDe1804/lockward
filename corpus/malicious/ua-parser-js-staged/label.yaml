@@ -1,4 +1,4 @@
 expected: malicious
 expected_rules: [no_outbound_build]
-source: "ua-parser-js 2021 (Downloader in build.js) — rekonstruiertes Muster, inerter Payload"
-notes: "Das curl-Muster steht im Kommentar von build.js. Lockward liest die Datei, führt sie nicht aus."
+source: "ua-parser-js 2021 (downloader in build.js) — reconstructed pattern, inert payload"
+notes: "The curl pattern is in a comment in build.js. Lockward reads the file and does not execute it."

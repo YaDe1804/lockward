@@ -1,4 +1,4 @@
 expected: benign
 expected_rules: []
 cohort: clean
-source: "body-parser ohne Install-Hook — bereinigter Lockfile-Ausschnitt"
+source: "body-parser with no install hook — cleaned lockfile excerpt"

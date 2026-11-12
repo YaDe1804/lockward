@@ -94,7 +94,7 @@ jobs:
           {
             echo '## Lockward corpus'
             echo
-            echo 'Messung von Install-Hooks und Heuristiken. Kein Schwellen-Gate.'
+            echo 'Measurement of install hooks and heuristics. No threshold gate.'
             echo
             echo '```'
             cat corpus-summary.txt

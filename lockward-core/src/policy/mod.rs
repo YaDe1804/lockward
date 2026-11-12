@@ -33,6 +33,23 @@ pub enum Mode {
     Enforce,
 }
 
+impl Mode {
+    /// Stable identifier for JSON and for the mode label.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Warn => "warn",
+            Self::Enforce => "enforce",
+        }
+    }
+
+    /// Display label. Mode uses the same word as [`Self::as_str`].
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        self.as_str()
+    }
+}
+
 /// Configured or effective gate action.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -47,6 +64,25 @@ pub enum Action {
     Fail,
 }
 
+impl Action {
+    /// Stable identifier for JSON and for the action label.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Allow => "allow",
+            Self::Warn => "warn",
+            Self::Review => "review",
+            Self::Fail => "fail",
+        }
+    }
+
+    /// Display label. An action uses the same word as [`Self::as_str`].
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        self.as_str()
+    }
+}
+
 /// Overall gate result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Outcome {
@@ -56,6 +92,28 @@ pub enum Outcome {
     Warn,
     /// At least one effective fail.
     Fail,
+}
+
+impl Outcome {
+    /// Stable JSON identifier: `ok`, `warn`, or `fail`.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::Warn => "warn",
+            Self::Fail => "fail",
+        }
+    }
+
+    /// Display label. This is not the JSON identifier.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Ok => "OK",
+            Self::Warn => "Warning",
+            Self::Fail => "Fail",
+        }
+    }
 }
 
 /// Loaded policy.
@@ -157,7 +215,11 @@ pub struct Violation {
     pub configured_action: Action,
     /// Action after warn-first downgrade.
     pub effective_action: Action,
-    /// Explanation shown in the report.
+    /// Lockfile path. Empty when the finding is not package-scoped.
+    pub package_path: String,
+    /// Stable disambiguator: hook name, advisory id, or rule id. Not display text.
+    pub subject: String,
+    /// Explanation shown in the report. Not part of the sort key.
     pub message: String,
 }
 
@@ -170,7 +232,7 @@ pub struct Decision {
     pub outcome: Outcome,
     /// Process exit code: 0 ok, 1 warn, 2 fail.
     pub exit_code: u8,
-    /// Violations, sorted by rule and package.
+    /// Violations, sorted by rule, package, path, and subject. Not by message text.
     pub violations: Vec<Violation>,
     /// Non-blocking notes, for example a missing baseline.
     pub notes: Vec<String>,
@@ -279,14 +341,8 @@ pub fn decide(policy: &Policy, input: Evaluation<'_>) -> Decision {
     for violation in &mut violations {
         violation.effective_action = effective(policy.mode, violation.configured_action);
     }
-    violations.sort_by(|left, right| {
-        left.rule
-            .cmp(right.rule)
-            .then(left.package_name.cmp(&right.package_name))
-            .then(left.package_version.cmp(&right.package_version))
-            .then(left.message.cmp(&right.message))
-    });
-    notes.sort();
+    violations.sort_by(violation_order);
+    retain_unique_notes(&mut notes);
     let exit_code = exit_code(policy.mode, &violations);
     Decision {
         mode: policy.mode,
@@ -309,6 +365,8 @@ fn consider_bin_shadows(policy: &Policy, shadows: &[BinShadow], violations: &mut
             rule: "bin_shadow",
             package_name: shadow.package_name.clone(),
             package_version: shadow.package_version.clone(),
+            package_path: shadow.package_path.clone(),
+            subject: shadow.command.clone(),
             configured_action: rule.action,
             effective_action: rule.action,
             message: format!(
@@ -333,8 +391,8 @@ fn consider_install_scripts(
     for hook in hooks {
         if known_downloader(&hook.package_name) {
             notes.push(format!(
-                "Install-Hook `{}` in {}@{} gehört zu einem bekannten Binary-Downloader; Netzwerk dabei ist erwartet.",
-                hook.hook, hook.package_name, hook.package_version
+                "Package {}@{} install hook `{}` belongs to a known binary downloader. Network access is expected.",
+                hook.package_name, hook.package_version, hook.hook
             ));
         }
         let signals = heuristics.iter().any(|finding| {
@@ -349,27 +407,29 @@ fn consider_install_scripts(
         }
         match hook.disposition {
             crate::hooks::HookDisposition::TrustedBuild => notes.push(format!(
-                "Install-Hook `{}` in {}@{} ist ein vertrautes Build-Kommando.",
-                hook.hook, hook.package_name, hook.package_version
+                "Package {}@{} install hook `{}` is a trusted build command.",
+                hook.package_name, hook.package_version, hook.hook
             )),
             crate::hooks::HookDisposition::Inspected => notes.push(format!(
-                "Install-Hook `{}` in {}@{} enthält kein Verdachtssignal.",
-                hook.hook, hook.package_name, hook.package_version
+                "Package {}@{} install hook `{}` has no suspicious signal.",
+                hook.package_name, hook.package_version, hook.hook
             )),
             crate::hooks::HookDisposition::Empty => notes.push(format!(
-                "Install hook `{}` in {}@{} has an empty body.",
-                hook.hook, hook.package_name, hook.package_version
+                "Package {}@{} install hook `{}` has an empty body.",
+                hook.package_name, hook.package_version, hook.hook
             )),
             crate::hooks::HookDisposition::Unverified | crate::hooks::HookDisposition::FlagOnly => {
                 violations.push(Violation {
                     rule: "install_scripts",
                     package_name: hook.package_name.clone(),
                     package_version: hook.package_version.clone(),
+                    package_path: hook.package_path.clone(),
+                    subject: hook.hook.clone(),
                     configured_action: Action::Review,
                     effective_action: Action::Review,
                     message: format!(
-                        "Install-Hook `{}` in {}@{} verweist auf ein nicht lesbares Ziel und braucht ein Review.",
-                        hook.hook, hook.package_name, hook.package_version
+                        "Package {}@{} install hook `{}` points at a target that could not be read and needs review.",
+                        hook.package_name, hook.package_version, hook.hook
                     ),
                 });
             }
@@ -407,6 +467,8 @@ fn consider_outbound(
             rule: "no_outbound_build",
             package_name: finding.package_name.clone(),
             package_version: finding.package_version.clone(),
+            package_path: finding.package_path.clone(),
+            subject: format!("{}\n{}", finding.hook, finding.rule_id),
             configured_action: action,
             effective_action: action,
             message: outbound_message(finding),
@@ -427,13 +489,13 @@ fn outbound_action(configured: Action, rule_id: &str) -> Action {
 fn outbound_message(finding: &HeuristicFinding) -> String {
     if finding.rule_id == "LW-H004" {
         format!(
-            "Hook `{}` in {}@{} führt heruntergeladenen Inhalt in einer Shell aus ({}).",
-            finding.hook, finding.package_name, finding.package_version, finding.rule_id
+            "Package {}@{} hook `{}` pipes downloaded content into a shell ({}).",
+            finding.package_name, finding.package_version, finding.hook, finding.rule_id
         )
     } else {
         format!(
-            "Hook `{}` in {}@{} lädt während der Installation aus dem Netz, ohne den Inhalt auszuführen ({}).",
-            finding.hook, finding.package_name, finding.package_version, finding.rule_id
+            "Package {}@{} hook `{}` downloads during install and does not execute the content ({}).",
+            finding.package_name, finding.package_version, finding.hook, finding.rule_id
         )
     }
 }
@@ -444,12 +506,12 @@ fn consider_execution(heuristics: &[HeuristicFinding], violations: &mut Vec<Viol
     for finding in heuristics {
         let message = match finding.rule_id {
             "LW-H001" | "LW-H002" => format!(
-                "Hook `{}` in {}@{} enthält starke Obfuskation ({}).",
-                finding.hook, finding.package_name, finding.package_version, finding.rule_id
+                "Package {}@{} hook `{}` contains strong obfuscation ({}).",
+                finding.package_name, finding.package_version, finding.hook, finding.rule_id
             ),
             "LW-H005" => format!(
-                "Hook `{}` in {}@{} führt einen Shell- oder Kindprozess aus ({}).",
-                finding.hook, finding.package_name, finding.package_version, finding.rule_id
+                "Package {}@{} hook `{}` starts a shell or a child process ({}).",
+                finding.package_name, finding.package_version, finding.hook, finding.rule_id
             ),
             _ => continue,
         };
@@ -457,6 +519,8 @@ fn consider_execution(heuristics: &[HeuristicFinding], violations: &mut Vec<Viol
             rule: finding.rule_id,
             package_name: finding.package_name.clone(),
             package_version: finding.package_version.clone(),
+            package_path: finding.package_path.clone(),
+            subject: finding.hook.clone(),
             configured_action: Action::Fail,
             effective_action: Action::Fail,
             message,
@@ -477,8 +541,7 @@ fn consider_new_dependencies(
     }
     let Some(baseline) = baseline else {
         notes.push(
-            "new_dependencies: keine Baseline übergeben, die Regel ist für diesen Lauf inaktiv."
-                .to_owned(),
+            "new_dependencies is inactive for this run because no baseline was passed.".to_owned(),
         );
         return;
     };
@@ -491,10 +554,12 @@ fn consider_new_dependencies(
             rule: "new_dependencies",
             package_name: node.name.clone(),
             package_version: node.version.clone(),
+            package_path: node.package_path.clone(),
+            subject: String::new(),
             configured_action: rule.action,
             effective_action: rule.action,
             message: format!(
-                "Direkte Abhängigkeit {}@{} fehlt in der Baseline und braucht ein Review.",
+                "Package {}@{} is a new direct dependency and is not in the baseline.",
                 node.name, node.version
             ),
         });
@@ -519,15 +584,17 @@ fn consider_vulnerabilities(
                 rule: "known_vulnerable",
                 package_name: package.name.clone(),
                 package_version: package.version.clone(),
+                package_path: package.package_path.clone(),
+                subject: advisory.id.clone(),
                 configured_action: rule.action,
                 effective_action: rule.action,
                 message: format!(
-                    "Bekannte Schwachstelle {} in {}@{} hat die Schwere {} (Schwelle {}).",
-                    advisory.id,
+                    "Package {}@{} matches advisory {} at severity {} (threshold {}).",
                     package.name,
                     package.version,
-                    severity_de(advisory.severity),
-                    severity_de(rule.min_severity)
+                    advisory.id,
+                    advisory.severity.label(),
+                    rule.min_severity.label()
                 ),
             });
         }
@@ -548,12 +615,11 @@ fn consider_advisory_coverage(
             rule: "advisory_coverage",
             package_name: String::new(),
             package_version: String::new(),
+            package_path: String::new(),
+            subject: String::new(),
             configured_action: rule.action,
             effective_action: rule.action,
-            message: format!(
-                "{} Pakete nicht gegen OSV geprüft (offline, kein/stale Cache).",
-                advisories.cache_misses
-            ),
+            message: coverage_message(advisories.cache_misses),
         });
     }
 }
@@ -575,11 +641,13 @@ fn consider_secrets(
             rule: "secret_path_access",
             package_name: finding.package_name.clone(),
             package_version: finding.package_version.clone(),
+            package_path: finding.package_path.clone(),
+            subject: format!("{}\n{}", finding.hook, finding.evidence),
             configured_action: rule.action,
             effective_action: rule.action,
             message: format!(
-                "Hook `{}` in {}@{} greift auf einen Secret-Pfad oder eine Secret-Variable zu.",
-                finding.hook, finding.package_name, finding.package_version
+                "Package {}@{} hook `{}` reads a secret path or a secret variable.",
+                finding.package_name, finding.package_version, finding.hook
             ),
         });
     }
@@ -645,21 +713,50 @@ fn exit_code(mode: Mode, violations: &[Violation]) -> u8 {
     }
 }
 
+/// `1 package` for one, and `0 packages` or `2 packages` otherwise.
+#[must_use]
+pub fn count_label(count: usize, singular: &str, plural: &str) -> String {
+    if count == 1 {
+        format!("1 {singular}")
+    } else {
+        format!("{count} {plural}")
+    }
+}
+
+fn coverage_message(misses: usize) -> String {
+    format!(
+        "{} (offline, no cache entry or a stale cache).",
+        count_label(
+            misses,
+            "package was not checked against OSV",
+            "packages were not checked against OSV",
+        )
+    )
+}
+
+fn violation_order(left: &Violation, right: &Violation) -> std::cmp::Ordering {
+    left.rule
+        .cmp(right.rule)
+        .then(left.package_name.cmp(&right.package_name))
+        .then(left.package_version.cmp(&right.package_version))
+        .then(left.package_path.cmp(&right.package_path))
+        .then(left.subject.cmp(&right.subject))
+}
+
+/// Drop repeated notes and keep the first occurrence.
+///
+/// Order is insertion order. Sorting by the sentence would move rows when the
+/// wording changes.
+pub fn retain_unique_notes(notes: &mut Vec<String>) {
+    let mut seen = BTreeSet::new();
+    notes.retain(|note| seen.insert(note.clone()));
+}
+
 fn outcome(exit_code: u8) -> Outcome {
     match exit_code {
         0 => Outcome::Ok,
         1 => Outcome::Warn,
         _ => Outcome::Fail,
-    }
-}
-
-fn severity_de(severity: Severity) -> &'static str {
-    match severity {
-        Severity::Critical => "kritisch",
-        Severity::High => "hoch",
-        Severity::Medium => "mittel",
-        Severity::Low => "niedrig",
-        Severity::Unknown => "unbekannt",
     }
 }
 
@@ -778,7 +875,7 @@ mod tests {
             .expect("coverage violation");
         assert_eq!(
             coverage.message,
-            "2 Pakete nicht gegen OSV geprüft (offline, kein/stale Cache)."
+            "2 packages were not checked against OSV (offline, no cache entry or a stale cache)."
         );
         assert!(decision.notes.iter().all(|note| note != &coverage.message));
     }
@@ -820,7 +917,7 @@ mod tests {
         assert_eq!(decision.outcome, Outcome::Warn);
         assert_eq!(decision.violations[0].configured_action, Action::Fail);
         assert_eq!(decision.violations[0].effective_action, Action::Warn);
-        assert!(decision.notes.iter().any(|note| note.contains("Baseline")));
+        assert!(decision.notes.iter().any(|note| note.contains("baseline")));
     }
 
     #[test]
@@ -836,7 +933,7 @@ mod tests {
                 advisories: vec![Advisory {
                     id: "GHSA-test".to_owned(),
                     aliases: Vec::new(),
-                    summary: "hoch".to_owned(),
+                    summary: "fixture".to_owned(),
                     severity: Severity::High,
                     cvss_score: None,
                     url: "https://example.invalid".to_owned(),
@@ -1183,5 +1280,68 @@ rules:
         let err = parse_policy_str(text, "bad.yaml").unwrap_err();
         assert!(matches!(err, Error::Policy { .. }), "{err}");
         assert!(err.to_string().contains("version"));
+    }
+
+    #[test]
+    fn violation_order_ignores_message_text() {
+        let mut rows = [
+            Violation {
+                rule: "no_outbound_build",
+                package_name: "pkg".to_owned(),
+                package_version: "1.0.0".to_owned(),
+                package_path: "node_modules/pkg".to_owned(),
+                configured_action: Action::Fail,
+                effective_action: Action::Fail,
+                subject: "postinstall\nLW-H004".to_owned(),
+                message: "alpha".to_owned(),
+            },
+            Violation {
+                rule: "no_outbound_build",
+                package_name: "pkg".to_owned(),
+                package_version: "1.0.0".to_owned(),
+                package_path: "node_modules/pkg".to_owned(),
+                configured_action: Action::Review,
+                effective_action: Action::Review,
+                subject: "postinstall\nLW-H003".to_owned(),
+                message: "zebra".to_owned(),
+            },
+        ];
+        rows.sort_by(violation_order);
+        assert_eq!(rows[0].subject, "postinstall\nLW-H003");
+        rows[0].message = "zebra".to_owned();
+        rows[1].message = "alpha".to_owned();
+        rows.sort_by(violation_order);
+        assert_eq!(rows[0].subject, "postinstall\nLW-H003");
+        assert_eq!(rows[1].subject, "postinstall\nLW-H004");
+    }
+
+    #[test]
+    fn coverage_counts_use_singular_only_for_one() {
+        assert_eq!(
+            coverage_message(0),
+            "0 packages were not checked against OSV (offline, no cache entry or a stale cache)."
+        );
+        assert_eq!(
+            coverage_message(1),
+            "1 package was not checked against OSV (offline, no cache entry or a stale cache)."
+        );
+        assert_eq!(
+            coverage_message(2),
+            "2 packages were not checked against OSV (offline, no cache entry or a stale cache)."
+        );
+    }
+
+    #[test]
+    fn notes_keep_the_first_occurrence() {
+        let mut notes = vec![
+            "zebra note".to_owned(),
+            "alpha note".to_owned(),
+            "zebra note".to_owned(),
+        ];
+        retain_unique_notes(&mut notes);
+        assert_eq!(
+            notes,
+            vec!["zebra note".to_owned(), "alpha note".to_owned()]
+        );
     }
 }

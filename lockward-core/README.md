@@ -1,9 +1,9 @@
 # lockward-core
 
-Bibliothek für die statische Supply-Chain-Analyse von Lockward.
+Library for Lockward's static supply-chain analysis.
 
-Öffentliche APIs bleiben frei von Panics. Fehler laufen über [`Error`](src/error.rs) und `Result`. Mode 1 liest nur Textdateien (Lockfiles, `package.json`) und ruft keinen Paketcode auf.
+Public APIs do not panic. Errors go through [`Error`](src/error.rs) and `Result`. Mode 1 reads only text files (lockfiles, `package.json`) and does not call package code.
 
-Grenzen für untrusted Input: Lockfiles über 32 MiB und mehr als 100 000 Pakete werden mit `Error::Limit` abgelehnt, bevor sie ausgewertet werden. Eine `package.json` über 1 MiB wird übersprungen und als Warnung gemeldet. Pro Scan werden höchstens 2048 OSV-Vulnerability-Detailabfragen gestellt; darüber bricht der Lauf ab, statt Treffer still zu verwerfen.
+Limits for untrusted input: lockfiles over 32 MiB and more than 100,000 packages are rejected with `Error::Limit` before they are evaluated. A `package.json` over 1 MiB is skipped and reported as a warning. At most 2048 OSV vulnerability detail queries are made per scan. Above that the run stops, instead of dropping hits silently.
 
-Module: `ingest`, `resolve`, `hooks`, `advisories`, `heuristics` (`heuristics-v1.1`), `score` (`score-v1`), `policy`, `scan`, `report` (Markdown, CI-Summary, JSON, CycloneDX 1.6).
+Modules: `ingest`, `resolve`, `hooks`, `advisories`, `heuristics` (`heuristics-v1.1`), `score` (`score-v1`), `policy`, `scan`, `report` (Markdown, CI summary, JSON, CycloneDX 1.6).

@@ -1,21 +1,21 @@
-# ADR 013 — Ausgeführt ist Fail, nur geladen ist Review
+# ADR 013 — Execution is fail, a download alone is review
 
-## Kontext
+## Context
 
-Nach ADR 012 bleiben zwei gutartige Downloader (`edgedriver`, `prisma`) geflaggt. Ihr Install-Skript lädt eine Binary, führt den Inhalt aber nicht aus. Dasselbe Textmuster hat ein bösartiger Download. Die Detektion soll sichtbar bleiben. Der Build soll daran nicht scheitern.
+After ADR 012, two benign downloaders (`edgedriver`, `prisma`) stay flagged. Their install script downloads a binary and does not execute the content. A malicious download has the same text pattern. The detection should stay visible. The build should not fail on it.
 
-## Entscheidung
+## Decision
 
-- `curl`/`wget` in eine Shell, Obfuskation (`LW-H001`, `LW-H002`) und Shell-out (`LW-H005`) sind Fail (Exit 2 in enforce). Secret-Zugriff und bekannte High-Vulns bleiben Fail.
-- Reines Netzwerk-Laden (`LW-H003`) ohne dieses Ausführungssignal ist Review (Exit 1, auch in enforce). Ein nicht lesbarer Install-Hook bleibt Review.
-- Die Grenze hängt am Muster, nicht am Paketnamen. `edgedriver` und `prisma` stehen nicht auf der Downloader-Liste.
-- Im Korpus zählt Review weiter als Fund. Precision, Recall und FP-Rate ändern sich durch die Härte nicht.
+- `curl`/`wget` into a shell, obfuscation (`LW-H001`, `LW-H002`), and shell-out (`LW-H005`) are fail (exit 2 in enforce). Secret access and known high vulnerabilities stay fail.
+- A bare network download (`LW-H003`) without that execution signal is review (exit 1, including in enforce). An unreadable install hook stays review.
+- The boundary is the pattern, not the package name. `edgedriver` and `prisma` are not on the downloader list.
+- In the corpus, review still counts as a finding. Precision, recall, and the false-positive rate do not change with the hardness.
 
-## Begründung
+## Rationale
 
-Ob ein unbekannter Download legitim ist, sieht Mode 1 dem Text nicht an. „Bitte prüfen“ ist die ehrliche Antwort. Sobald der Inhalt in eine Shell, einen Interpreter oder einen Kindprozess geht, ist das Muster kategorisch gefährlich und bricht den Build.
+Mode 1 cannot tell from the text whether an unknown download is legitimate. "Please review" is the honest answer. Once the content goes into a shell, an interpreter, or a child process, the pattern is categorically dangerous and fails the build.
 
-## Alternativen
+## Alternatives
 
-- Jedes Netzwerk-Signal weiter als Fail: die beiden Residual-Downloader brechen saubere Builds.
-- Reines Laden stillschweigend erlauben: der bösartige Download ohne Pipe verschwindet mit den legitimen Downloadern.
+- Keep every network signal as fail: the two residual downloaders break clean builds.
+- Silently allow a bare download: the malicious download without a pipe disappears together with the legitimate downloaders.

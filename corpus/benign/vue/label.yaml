@@ -1,4 +1,4 @@
 expected: benign
 expected_rules: []
 cohort: clean
-source: "vue ohne Install-Hook — bereinigter Lockfile-Ausschnitt"
+source: "vue with no install hook — cleaned lockfile excerpt"

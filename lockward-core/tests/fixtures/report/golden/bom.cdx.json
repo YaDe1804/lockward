@@ -56,12 +56,12 @@
           "author": "YaDe Labs",
           "name": "lockward",
           "type": "application",
-          "version": "0.1.2"
+          "version": "0.2.0"
         }
       ]
     }
   },
-  "serialNumber": "urn:uuid:277b3f77-3cd7-5381-83d2-3861bfb18b3b",
+  "serialNumber": "urn:uuid:d1a295e0-44d5-5372-9132-af6c073d1e12",
   "specVersion": "1.6",
   "version": 1
 }

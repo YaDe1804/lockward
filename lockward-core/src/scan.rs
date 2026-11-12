@@ -6,7 +6,7 @@ use crate::advisories::{AdvisoryCache, HttpTransport, OsvClient, package_queries
 use crate::heuristics::evaluate;
 use crate::hooks::{bin_shadows, detect_hooks};
 use crate::ingest::{Lockfile, parse_lockfile};
-use crate::policy::{Decision, Evaluation, Policy, decide, known_downloader};
+use crate::policy::{Decision, Evaluation, Policy, decide, known_downloader, retain_unique_notes};
 use crate::resolve::{Graph, resolve};
 use crate::score::{ScoreReport, score};
 use crate::{Error, Result};
@@ -115,8 +115,7 @@ pub fn analyze<T: HttpTransport>(
         },
     );
     decision.notes.extend(advisories.warnings.iter().cloned());
-    decision.notes.sort();
-    decision.notes.dedup();
+    retain_unique_notes(&mut decision.notes);
     Ok(Analysis {
         lock,
         lock_path,

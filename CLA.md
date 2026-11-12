@@ -1,22 +1,25 @@
-# Contributor License Agreement (Individual) — Entwurf, rechtlich prüfen
+# Contributor License Agreement (Individual) — draft, needs legal review
 
-Mit dem Einreichen eines Beitrags ("Contribution") zu Lockward stimmst du,
-der/die Beitragende, Folgendem gegenüber **Deniz Yayvan** zu:
+This draft is not legal advice and it has not been reviewed by counsel.
+Do not treat it as the final grant until that review is done.
 
-1. **Urheberrechtslizenz.** Du gewährst Deniz Yayvan ein weltweites,
-   zeitlich unbegrenztes, unwiderrufliches, nicht-exklusives, gebührenfreies
-   Recht, deinen Beitrag zu nutzen, zu vervielfältigen, zu bearbeiten,
-   öffentlich zugänglich zu machen, zu unterlizenzieren und **unter
-   beliebigen Lizenzbedingungen (einschließlich AGPL-3.0 und kommerzieller
-   Lizenzen) zu lizenzieren und weiterzulizenzieren.**
-2. **Patentlizenz.** Du gewährst Deniz Yayvan und den Nutzern eine
-   entsprechende, gebührenfreie Patentlizenz für deinen Beitrag.
-3. **Zusicherung.** Du bestätigst, dass du berechtigt bist, diese Rechte zu
-   gewähren, und dass dein Beitrag dein eigenes Werk ist (oder du die nötigen
-   Rechte hast).
-4. **Beibehaltung deiner Rechte.** Du behältst alle Rechte an deinem Beitrag
-   und darfst ihn selbst beliebig weiterverwenden.
-5. **Keine Gewährleistung.** Beiträge werden "as is" bereitgestellt.
+By submitting a contribution ("Contribution") to Lockward you, the
+contributor, agree with **Deniz Yayvan** to the following:
 
-Zustimmung erfolgt durch [Signatur in diesem Repo / CLA-Bot / E-Mail an
-deniz.yayvan@yadelabs.de].
+1. **Copyright license.** You grant Deniz Yayvan a worldwide, perpetual,
+   irrevocable, non-exclusive, royalty-free right to use, reproduce,
+   prepare derivative works of, publicly display, publicly perform,
+   sublicense, and **license and relicense your Contribution under any
+   terms (including AGPL-3.0 and commercial licenses).**
+2. **Patent license.** You grant Deniz Yayvan and the users of the
+   project a corresponding royalty-free patent license for your
+   Contribution.
+3. **Your authority.** You confirm that you can grant these rights and
+   that the Contribution is your own work (or that you have the rights
+   required to submit it).
+4. **You keep your rights.** You retain all rights in your Contribution
+   and may use it for any other purpose.
+5. **No warranty.** Contributions are provided "as is".
+
+You agree by signing as arranged for this repository, or by email to
+deniz.yayvan@yadelabs.de.

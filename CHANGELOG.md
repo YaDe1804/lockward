@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-12
+
+### Changed
+
+- All output text is English. That covers the CLI, reports, error messages,
+  the evaluation summary, and the GitHub Action text. There is no
+  localization layer and no `--lang` flag.
+- JSON `gate.outcome` is `ok`, `warn`, or `fail`. The 0.1.2 report used
+  `OK`, `Warnung`, and `Block`.
+- JSON reports include `report_version` (`2`). `message`, `explanation`,
+  `description`, and `notes` are English sentences and are not a stable
+  contract.
+- Anyone who matches report text has to match the English sentences.
+  Match `rule`, `rule_id`, `gate.outcome`, and the other identifiers listed
+  in the README instead of a display sentence.
+
+### Fixed
+
+- Concurrent readers and writers of the same OSV cache file retry a
+  permission or sharing failure a few times. A missing name is retried
+  only while a replace of that key is in progress. A reader still never
+  sees a partial entry. If the file stays unavailable, a read is a cache
+  miss with a warning and a write is a warning.
+
 ## [0.1.2] - 2026-11-12
 
 ### Security
@@ -136,7 +160,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - JSON paths are normalized the same way on Windows and Linux. Base64 and
   `Function` heuristics match more tightly. UTC timestamps use the `time` crate.
 
-[Unreleased]: https://github.com/YaDe1804/lockward/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/YaDe1804/lockward/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/YaDe1804/lockward/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/YaDe1804/lockward/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/YaDe1804/lockward/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/YaDe1804/lockward/releases/tag/v0.1.0

@@ -1,5 +1,5 @@
 expected: benign
 expected_rules: []
 cohort: inspected_clean
-source: "lightningcss — legitimer Binary-Install, nicht auf der Allowlist"
-notes: "Held-out: legitimes Install-Script, Name steht nicht in der kuratierten Allowlist."
+source: "lightningcss — legitimate binary install, not on the allowlist"
+notes: "Held out: legitimate install script. The name is not on the curated allowlist."

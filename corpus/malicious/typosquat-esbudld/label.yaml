@@ -1,4 +1,4 @@
 expected: malicious
 expected_rules: [no_outbound_build]
-source: "Typosquat neben esbuild — rekonstruiertes Muster, inerter Payload"
-notes: "Name esbudld ist kein Allowlist-Treffer. Das Muster bleibt im console.log-String."
+source: "Typosquat next to esbuild — reconstructed pattern, inert payload"
+notes: "The name esbudld is not an allowlist hit. The pattern stays inside the console.log string."

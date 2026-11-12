@@ -1,4 +1,4 @@
 expected: benign
 expected_rules: []
 cohort: clean
-source: "cors ohne Install-Hook — bereinigter Lockfile-Ausschnitt"
+source: "cors with no install hook — cleaned lockfile excerpt"

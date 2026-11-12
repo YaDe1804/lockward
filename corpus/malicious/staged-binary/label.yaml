@@ -1,4 +1,4 @@
 expected: malicious
 expected_rules: [no_outbound_build]
-source: "Gestagter Binary-Downloader — rekonstruiertes Muster, inerter Payload"
-notes: "Das curl-Muster steht im Kommentar von install.js. Lockward liest die Datei, führt sie nicht aus."
+source: "Staged binary downloader — reconstructed pattern, inert payload"
+notes: "The curl pattern is in a comment in install.js. Lockward reads the file and does not execute it."

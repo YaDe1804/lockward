@@ -1,83 +1,83 @@
-# Lockward Eval-Korpus
+# Lockward evaluation corpus
 
-Gelabelte, **inerte** npm-Fixtures für die offline Eval-Harness (`lockward-eval`).
-Der Korpus misst Install-Hooks und Heuristiken. Er ist keine OSV-Messung:
-ohne Advisory-Cache bleibt `known_vulnerable` leer.
+Labeled, **inert** npm fixtures for the offline evaluation harness (`lockward-eval`).
+The corpus measures install hooks and heuristics. It is not an OSV measurement:
+without an advisory cache, `known_vulnerable` stays empty.
 
-## Sicherheits-Leitplanke
+## Safety rail
 
-- Kein echter Schadcode, keine Malware-Tarballs, kein Download, keine Ausführung.
-- Lockward liest die Dateien nur statisch (Mode 1).
-- Install-Hooks sind entweder `node -e "console.log('LOCKWARD_EVAL_FIXTURE …')"`
-  (Muster im String), ein literales Build-Kommando, `node <datei>`,
-  `node --require <datei> <datei>`, `./<datei>`, `sh -c 'node <datei>'`
-  oder `bun <datei>`. Der Hook-String selbst enthält kein `curl`, kein `wget`
-  und keine Pipe.
-- Zusätzliche Dateien enthalten nur Kommentare (`//` oder `#`) und
-  `console.log("LOCKWARD_EVAL_FIXTURE")`. Lockward liest sie, führt sie nicht aus.
-- Die Fälle sind **rekonstruierte Muster** öffentlich dokumentierter Vorfälle,
-  keine kopierten Originale.
+- No real malicious code, no malware tarballs, no download, no execution.
+- Lockward reads the files only statically (Mode 1).
+- Install hooks are either `node -e "console.log('LOCKWARD_EVAL_FIXTURE …')"`,
+  a literal build command, `node <file>`,
+  `node --require <file> <file>`, `./<file>`, `sh -c 'node <file>'`,
+  or `bun <file>`. The hook string itself contains no `curl`, no `wget`,
+  and no pipe.
+- Extra files contain only comments (`//` or `#`) and
+  `console.log("LOCKWARD_EVAL_FIXTURE")`. Lockward reads them and does not execute them.
+- The cases are **reconstructed patterns** of publicly documented incidents,
+  not copied originals.
 
-Ein versehentliches `npm install` in einem Fallverzeichnis gibt den Marker aus
-und holt nichts.
+An accidental `npm install` in a case directory prints the marker
+and fetches nothing.
 
 ## Layout
 
 ```text
 corpus/
   eval-policy.yaml
-  malicious/<fall>/
-  benign/<fall>/
-  regression/<fall>/
+  malicious/<case>/
+  benign/<case>/
+  regression/<case>/
 ```
 
-`regression/` hält die behobenen Hook-Formen (`./husky`, `node --require`,
-`sh -c`, `bun`, ein vertrautes Kommando mit `$(...)`, Backticks,
-doppeltem `$(...)` oder `<(...)`, sowie ein fremdes Bin `husky.cmd`). Die
-Harness misst sie und verlangt `fail`.
-Precision, Recall, F1 und die FP-Rate rechnen nur `malicious/` und `benign/`
-(72 Fälle).
+`regression/` holds the fixed hook forms (`./husky`, `node --require`,
+`sh -c`, `bun`, a trusted command with `$(...)`, backticks,
+a doubled `$(...)` or `<(...)`, and a foreign bin `husky.cmd`). The
+harness measures them and requires `fail`.
+Precision, recall, F1, and the false-positive rate count only `malicious/` and `benign/`
+(72 cases).
 
-Jeder Fall hat `package-lock.json` (lockfileVersion 3), bei Bedarf
-`package.json` unter `node_modules/…`, und `label.yaml`.
+Every case has `package-lock.json` (lockfileVersion 3), a `package.json`
+under `node_modules/…` when needed, and `label.yaml`.
 
 ## Label
 
 ```yaml
 expected: malicious            # malicious | benign
 expected_rules: [no_outbound_build]
-cohort: trusted_build             # optional, nur bei benign: trusted_build | inspected_clean | known_downloader | residual_downloader | clean | heuristic_probe
-source: "Vorfall — rekonstruiertes Muster, inerter Payload"
+cohort: trusted_build             # optional, benign only: trusted_build | inspected_clean | known_downloader | residual_downloader | clean | heuristic_probe
+source: "incident — reconstructed pattern, inert payload"
 notes: "optional"
 ```
 
-`expected_rules` nennt die Regeln, die feuern **sollen** (Policy-Name oder
-`LW-H00x`). Bei gutartigen Fällen ist die Liste leer. `advisory_coverage` und
-`new_dependencies` gehören nicht dazu.
+`expected_rules` names the rules that **should** fire (a policy name or
+`LW-H00x`). For benign cases the list is empty. `advisory_coverage` and
+`new_dependencies` are not included.
 
-`cohort` trennt die gutartigen Fälle für die ehrliche FP-Rate:
+`cohort` splits the benign cases for an honest false-positive rate:
 
-- `trusted_build`: der Hook besteht nur aus einem vertrauten Build-Kommando
-- `inspected_clean`: eine lokale Skriptdatei wurde gelesen und ist sauber
-- `known_downloader`: Paket steht auf der endlichen Downloader-Liste
-- `residual_downloader`: Netzwerk im Skript, Paket steht nicht auf dieser Liste
-- `clean`: kein Install-Hook
-- `heuristic_probe`: Hook nur, um eine Heuristik zu provozieren
+- `trusted_build`: the hook consists only of a trusted build command
+- `inspected_clean`: a local script file was read and is clean
+- `known_downloader`: the package is on the finite downloader list
+- `residual_downloader`: network access in the script, and the package is not on that list
+- `clean`: no install hook
+- `heuristic_probe`: a hook only to provoke a heuristic
 
-Neue Held-out-Namen werden nicht auf die Downloader-Liste gesetzt. Ein unbekannter
-Downloader bleibt ein Fund.
+New held-out names are not added to the downloader list. An unknown
+downloader stays a finding.
 
-## Bekannte Grenze
+## Known limit
 
-`malicious/node-ipc-protestware` bleibt ein False Negative. Die Protestware lag
-im Bibliothekscode, nicht in einem Install-Hook. Mode 1 liest `index.js` nicht.
-Das ist keine offene Heuristik-Lücke für diesen Schritt: eine Suche über
-beliebige Quelldateien würde neue Fehlalarme erzeugen. Kandidat für eine spätere
-Content-Heuristik oder Mode 2.
+`malicious/node-ipc-protestware` stays a false negative. The protestware lived
+in library code, not in an install hook. Mode 1 does not read `index.js`.
+That is not an open heuristic gap for this step: a search over
+arbitrary source files would create new false positives. It is a candidate for a later
+content heuristic or for Mode 2.
 
-`corpus/eval-policy.yaml` setzt `advisory_coverage` auf `allow`, damit der
-Offline-Lauf die Hook- und Heuristik-Erkennung misst. `known_vulnerable`
-bleibt ohne Cache leer.
+`corpus/eval-policy.yaml` sets `advisory_coverage` to `allow`, so the
+offline run measures hook and heuristic detection. `known_vulnerable`
+stays empty without a cache.
 
 ## Harness
 
@@ -85,6 +85,6 @@ bleibt ohne Cache leer.
 cargo run --locked -p lockward-eval -- --output corpus-report.json
 ```
 
-Die Ausgabe ist die Confusion-Matrix, Precision, FP-Rate, Recall und F1, die
-Listen jedes FN und FP, und die FP-Rate nach Kohorte. Der Korpus ist
-gutartig-lastig. Schwellen werden hier nicht an den Held-out-Fällen nachgezogen.
+The output is the confusion matrix, precision, the false-positive rate, recall, and F1, the
+lists of every false negative and false positive, and the false-positive rate by cohort. The corpus is
+weighted toward benign cases. Thresholds are not tuned on the held-out cases here.

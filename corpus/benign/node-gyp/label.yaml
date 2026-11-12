@@ -1,4 +1,4 @@
 expected: benign
 expected_rules: []
 cohort: trusted_build
-source: "node-gyp — legitimer nativer Rebuild, inerter Marker"
+source: "node-gyp — legitimate native rebuild, inert marker"

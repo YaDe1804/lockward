@@ -1,5 +1,5 @@
 expected: benign
 expected_rules: []
 cohort: trusted_build
-source: "node-expat — natives Rebuild-Kommando, Name nicht gelistet"
-notes: "Held-out: vertrautes Build-Kommando, nicht über den Paketnamen freigegeben."
+source: "node-expat — native rebuild command, name not listed"
+notes: "Held out: trusted build command, not accepted by package name."

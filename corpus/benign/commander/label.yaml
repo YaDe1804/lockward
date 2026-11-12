@@ -1,4 +1,4 @@
 expected: benign
 expected_rules: []
 cohort: clean
-source: "commander ohne Install-Hook — bereinigter Lockfile-Ausschnitt"
+source: "commander with no install hook — cleaned lockfile excerpt"

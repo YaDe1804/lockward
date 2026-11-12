@@ -1,25 +1,25 @@
-# ADR 008 — Policy, Warn-First und Exit-Codes
+# ADR 008 — Policy, warn-first, and exit codes
 
-## Kontext
+## Context
 
-AP1.7 braucht fünf Default-Regeln, eine ladbare YAML-Policy, Warn-First als Baseline und Exit-Codes 0/1/2. Der Scanner darf das Repository nicht verändern.
+AP1.7 needs five default rules, a loadable YAML policy, warn-first as the baseline, and exit codes 0/1/2. The scanner must not modify the repository.
 
-## Entscheidung
+## Decision
 
-- Policy-Version 1, Parser `noyalib` (nicht das archivierte `serde_yaml`). Unbekannte Felder sind Fehler. MSRV dafür ist 1.86.
-- Modus `warn`: Fail und Review werden zu Warn. Exit ist 0 oder 1. Es werden keine Dateien geschrieben.
-- Modus `enforce`: Fail → Exit 2, Warn oder Review → Exit 1, sonst 0. Ein Fail schlägt Warnungen.
-- Regeln: `install_scripts` (Allowlist, Default warn), `no_outbound_build` (Fail, Domains allowlistbar), `new_dependencies` (Review), `known_vulnerable` (Fail ab high), `secret_path_access` (Fail).
-- Ohne Baseline bleibt `new_dependencies` inaktiv und erzeugt nur einen Hinweis. `lockward baseline` schreibt `name@version` der direkten Abhängigkeiten.
-- Eine Domain-Allowlist unterdrückt Netzwerk-Funde nur, wenn der Beleg Hosts enthält und jeder Host gelistet ist. Ein nacktes `curl` ohne URL bleibt ein Verstoß.
-- Die CLI führt den Scan aus und setzt den Exit-Code. `--offline` erzwingt den Cache.
+- Policy version 1, parser `noyalib` (not the archived `serde_yaml`). Unknown fields are errors. The MSRV for that is 1.86.
+- Mode `warn`: fail and review become warn. The exit code is 0 or 1. No files are written.
+- Mode `enforce`: fail → exit 2, warn or review → exit 1, otherwise 0. A fail outranks warnings.
+- Rules: `install_scripts` (allowlist, default warn), `no_outbound_build` (fail, domains can be allowlisted), `new_dependencies` (review), `known_vulnerable` (fail from high), `secret_path_access` (fail).
+- Without a baseline, `new_dependencies` stays inactive and only produces a note. `lockward baseline` writes `name@version` of the direct dependencies.
+- A domain allowlist suppresses network findings only when the evidence contains hosts and every host is listed. A bare `curl` without a URL stays a finding.
+- The CLI runs the scan and sets the exit code. `--offline` forces the cache.
 
-## Begründung
+## Rationale
 
-Warn-First entspricht dem spezifizierten Onboarding. Fail-closed bei Advisories und Secret-Pfaden bleibt in der Policy sichtbar, blockiert den ersten Lauf aber nicht. Eine fehlende Baseline soll nicht jedes Projekt sofort mit Review-Warnungen fluten.
+Warn-first matches the specified onboarding. Fail-closed for advisories and secret paths stays visible in the policy, but it does not block the first run. A missing baseline must not flood every project with review warnings at once.
 
-## Alternativen
+## Alternatives
 
-- Ersten Lauf ohne Baseline als Review aller direkten Abhängigkeiten: laut, widerspricht „verändert nichts außer Warnungen“ im Sinne eines brauchbaren Erstlaufs.
+- Treat the first run without a baseline as a review of every direct dependency: noisy, and it conflicts with "changes nothing except warnings" for a usable first run.
 - `serde_yaml` 0.9: unmaintained.
-- Exit 1 für Review auch im Warn-Modus getrennt von Warn: die CLI kennt nur 0/1/2, Review ist im Warn-Modus eine Warnung.
+- Exit 1 for review in warn mode, separate from warn: the CLI only knows 0/1/2. Review is a warning in warn mode.

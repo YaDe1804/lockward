@@ -1,5 +1,5 @@
 name: Lockward
-description: Statischer Supply-Chain-Scan für npm-Lockfiles. Mode 1 führt keinen Paketcode aus.
+description: Static supply-chain scan for npm lockfiles. Mode 1 does not execute package code.
 author: YaDe Labs
 branding:
   icon: shield
@@ -7,44 +7,44 @@ branding:
 
 inputs:
   path:
-    description: Projektverzeichnis oder package-lock.json
+    description: Project directory or package-lock.json
     required: false
     default: .
   mode:
-    description: warn oder enforce
+    description: warn or enforce
     required: false
     default: warn
   policy:
-    description: Optionale YAML-Policy. Leer lässt die eingebaute Warn-First-Policy.
+    description: Optional YAML policy. Empty uses the built-in warn-first policy.
     required: false
     default: ""
   offline:
-    description: Nur den Advisory-Cache verwenden (true/false)
+    description: Use only the advisory cache (true/false)
     required: false
     default: "false"
   lockward-bin:
-    description: Pfad oder Name der lockward-Binary
+    description: Path or name of the lockward binary
     required: false
     default: lockward
   token:
-    description: Token für den PR-Kommentar
+    description: Token for the pull-request comment
     required: false
     default: ${{ github.token }}
   comment:
-    description: Markdown als PR-Kommentar posten (true/false)
+    description: Post the Markdown as a pull-request comment (true/false)
     required: false
     default: "true"
   scanned-at:
-    description: Optionaler RFC3339-Zeitstempel für reproduzierbare Reports
+    description: Optional RFC3339 timestamp for reproducible reports
     required: false
     default: ""
 
 outputs:
   exit-code:
-    description: Gate-Exit-Code (0 ok, 1 Warnung, 2 Fail)
+    description: Gate exit code (0 OK, 1 Warning, 2 Fail)
     value: ${{ steps.scan.outputs.exit-code }}
   report-json:
-    description: Pfad zu report.json
+    description: Path to report.json
     value: ${{ steps.scan.outputs.report-json }}
 
 runs:

@@ -2,11 +2,12 @@
 
 ## Supported versions
 
-Lockward is pre-1.0. Security fixes go to 0.1.2 only. 0.1.1 and older receive no fixes.
+Lockward is pre-1.0. Security fixes go to 0.2.x only. 0.1.2 and older receive no fixes.
 
 | Version | Supported |
 | --- | --- |
-| 0.1.2 | yes |
+| 0.2.x | yes |
+| 0.1.2 | no |
 | 0.1.1 | no |
 | 0.1.0 | no |
 
