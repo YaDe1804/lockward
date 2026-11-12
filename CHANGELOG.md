@@ -23,6 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Match `rule`, `rule_id`, `gate.outcome`, and the other identifiers listed
   in the README instead of a display sentence.
 
+### Fixed
+
+- Concurrent readers and writers of the same OSV cache file retry a
+  permission or sharing failure a few times. A missing name is retried
+  only while a replace of that key is in progress. A reader still never
+  sees a partial entry. If the file stays unavailable, a read is a cache
+  miss with a warning and a write is a warning.
+
 ## [0.1.2] - 2026-11-12
 
 ### Security

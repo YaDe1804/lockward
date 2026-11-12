@@ -74,6 +74,10 @@ A `--require` / `--import` value that is a bare module name is not resolved. Onl
 
 `KNOWN_DOWNLOADERS` includes `chromedriver` and `geckodriver`. It does not include `edgedriver`. The list is a closed set of packages whose install-time download is expected (browsers, drivers, and the native stylesheet binaries). `edgedriver` fetches a driver the same way, and that text is the same shape as a malicious download. ADR 013 leaves `edgedriver` and `prisma` as residual findings: a download that is not piped into a shell stays a review, and the name is not added to hide a corpus hit. Putting `edgedriver` on the list would also hide that pattern under any other name that copied the same script.
 
+## Parallel scans on one advisory cache
+
+Two processes, or two threads, may read and write the same OSV cache directory. An entry is written to a temporary file and renamed into place, so a reader does not observe a half-written file. While a rename replaces a file that another thread still has open, Windows can return access denied or a sharing violation, and the name can be missing for a moment. The cache retries access denied and sharing failures at most eight times and waits at most 140 ms in total. A missing name is retried only while a publish marker for that key is still fresh, with the same limits. A different error is not retried, and a miss with no marker returns at once. If the file is still unavailable, a read becomes a cache miss with a warning, and a write becomes a warning. The scan does not stop.
+
 ## What the SBOM does not contain
 
 The CycloneDX document is the lockfile, not the scan result. See ADR 015.
