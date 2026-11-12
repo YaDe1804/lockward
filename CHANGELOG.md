@@ -7,8 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-12
+
 ### Security
 
+- Users of 0.1.1 should update. 0.1.1 and older receive no further security
+  fixes.
+- Hook analysis no longer treats a trusted command as a trusted build when
+  the arguments run shell code (`$(...)`, backticks, process substitution,
+  subshells, brace groups, here-documents, and `eval` / `source` / `.`).
+  A package that is not the publisher of a trusted command, and that declares
+  that command's `bin` under a different case or with a `.cmd`, `.exe`, or
+  `.bat` suffix, is reported as `bin_shadow`.
 - Updated `rustls` to 0.23.46, `rustls-webpki` to 0.103.16,
   `webpki-root-certs` to 1.0.12, and `tokio` to 1.54.1
   (RUSTSEC-2026-0346, RUSTSEC-2026-0347, RUSTSEC-2026-0348,
@@ -54,6 +64,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A package that declares a trusted build command's `bin` name, and is not
   that command's publisher, is reported as `bin_shadow`. Hooks that call the
   bare name are `unverified` in that project.
+- A trusted bin is compared with the same normalization as the hook command:
+  ASCII lower case, then one trailing `.cmd`, `.exe`, or `.bat`. `Husky`,
+  `husky.cmd`, and `HUSKY.EXE` shadow `husky`. The finding quotes the
+  lockfile spelling. One inert regression case covers `husky.cmd` and stays
+  outside the 72-case metrics.
 - A trusted command is not a trusted build when its arguments run shell
   syntax. `$(...)` and backticks are walked like `sh -c`, including inside
   double quotes. Process substitution, subshells, brace groups,
@@ -64,6 +79,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The CycloneDX document changed. A document from 0.1.1 does not compare
+  field-for-field with a document from this release:
+  - A dev dependency is `scope` `excluded` and has the property
+    `lockward:dev` set to `true`. It used to be `optional`. An optional
+    dependency that is not a dev dependency is `scope` `optional`.
+  - Every component, including the root, has a `bom-ref`. The same
+    `name@version` at more than one path is one component.
+  - `dependencies` lists the root and every component. `dependsOn` is sorted.
+    A component with no dependencies has an empty list. Unresolved edges are
+    not listed; their count is `lockward:unresolved-edges` on the root.
+  - `serialNumber` is derived from the document without `serialNumber` and
+    without `metadata.timestamp`. A different timestamp does not change it.
+    A different component, scope, license, hash, edge, or Lockward version
+    does.
 - CVSS boundary cases from the FIRST v3.1 specification and examples are
   locked in tests. The formula is unchanged.
 - `KNOWN_DOWNLOADERS` and `TRUSTED_COMMANDS` are checked to stay strictly
@@ -107,6 +136,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - JSON paths are normalized the same way on Windows and Linux. Base64 and
   `Function` heuristics match more tightly. UTC timestamps use the `time` crate.
 
-[Unreleased]: https://github.com/YaDe1804/lockward/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/YaDe1804/lockward/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/YaDe1804/lockward/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/YaDe1804/lockward/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/YaDe1804/lockward/releases/tag/v0.1.0

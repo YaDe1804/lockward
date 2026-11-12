@@ -757,14 +757,18 @@ fn listed(options: &[&str], name: &str) -> bool {
     options.binary_search(&name).is_ok()
 }
 
-fn program_name(argv0: &str) -> String {
+/// Command name used for trust and `bin` comparison.
+///
+/// The lockfile spelling is kept elsewhere. This form is the basename, ASCII
+/// lower case, with one trailing `.cmd`, `.exe`, or `.bat` removed. Case is
+/// folded before the suffix check, so `HUSKY.EXE` and `husky.cmd` are `husky`.
+pub(super) fn program_name(argv0: &str) -> String {
     let base = argv0.rsplit(['/', '\\']).next().unwrap_or(argv0);
-    let base = base
-        .strip_suffix(".cmd")
-        .or_else(|| base.strip_suffix(".exe"))
-        .or_else(|| base.strip_suffix(".bat"))
-        .unwrap_or(base);
-    base.to_ascii_lowercase()
+    let lower = base.to_ascii_lowercase();
+    let stripped = [".cmd", ".exe", ".bat"]
+        .into_iter()
+        .find_map(|suffix| lower.strip_suffix(suffix));
+    stripped.unwrap_or(&lower).to_owned()
 }
 
 fn npm_run_target(argv: &[String]) -> Option<String> {

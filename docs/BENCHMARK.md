@@ -8,7 +8,7 @@ numbers, including the uncomfortable ones.
 ## Method
 
 - **Corpus:** 72 cases under [`corpus/`](../corpus) — 16 malicious, 56 benign.
-  Eight regression cases live beside that set and are not part of these numbers.
+  Nine regression cases live beside that set and are not part of these numbers.
   See [Regression cases](#regression-cases).
   - **Malicious** cases are *patterns reconstructed* from publicly documented npm
     supply-chain incidents (event-stream, ua-parser-js, crossenv-style
@@ -56,8 +56,9 @@ False-positive rate by cohort:
 ## Regression cases
 
 `corpus/regression/` holds the hook forms that used to skip inspection:
-`./husky`, `node --require`, `sh -c`, `bun`, and a trusted command whose
-arguments are `$(...)`, backticks, a double-quoted `$(...)`, or `<(...)`.
+`./husky`, `node --require`, `sh -c`, `bun`, a trusted command whose
+arguments are `$(...)`, backticks, a double-quoted `$(...)`, or `<(...)`,
+and a foreign `husky.cmd` bin.
 They are reconstructed, inert payloads. `lockward-eval` scans them and
 prints them apart from the matrix. Each one must come back `fail`; any
 other severity aborts the run.

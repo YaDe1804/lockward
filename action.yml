@@ -29,7 +29,7 @@ inputs:
     default: ""
   version:
     description: "Lockward release tag to download"
-    default: "v0.1.1"
+    default: "v0.1.2"
   verify-signature:
     description: "Verify the cosign signature of SHA256SUMS (true/false)"
     default: "true"

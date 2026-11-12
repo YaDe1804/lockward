@@ -32,8 +32,9 @@ corpus/
 ```
 
 `regression/` hält die behobenen Hook-Formen (`./husky`, `node --require`,
-`sh -c`, `bun`, sowie ein vertrautes Kommando mit `$(...)`, Backticks,
-doppeltem `$(...)` oder `<(...)`). Die Harness misst sie und verlangt `fail`.
+`sh -c`, `bun`, ein vertrautes Kommando mit `$(...)`, Backticks,
+doppeltem `$(...)` oder `<(...)`, sowie ein fremdes Bin `husky.cmd`). Die
+Harness misst sie und verlangt `fail`.
 Precision, Recall, F1 und die FP-Rate rechnen nur `malicious/` und `benign/`
 (72 Fälle).
 

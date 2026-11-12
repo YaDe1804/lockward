@@ -1,0 +1,4 @@
+expected: malicious
+expected_rules: [bin_shadow]
+source: "Foreign bin husky.cmd — reconstructed pattern, inert payload"
+notes: "evil-husky declares bin husky.cmd and its postinstall calls husky.cmd. Lockward does not execute it."

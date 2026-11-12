@@ -73,3 +73,13 @@ A `--require` / `--import` value that is a bare module name is not resolved. Onl
 ## `edgedriver` is not a known downloader
 
 `KNOWN_DOWNLOADERS` includes `chromedriver` and `geckodriver`. It does not include `edgedriver`. The list is a closed set of packages whose install-time download is expected (browsers, drivers, and the native stylesheet binaries). `edgedriver` fetches a driver the same way, and that text is the same shape as a malicious download. ADR 013 leaves `edgedriver` and `prisma` as residual findings: a download that is not piped into a shell stays a review, and the name is not added to hide a corpus hit. Putting `edgedriver` on the list would also hide that pattern under any other name that copied the same script.
+
+## What the SBOM does not contain
+
+The CycloneDX document is the lockfile, not the scan result. See ADR 015.
+
+- No vulnerabilities, no VEX, and no advisory ratings. Those stay in the JSON and Markdown reports.
+- No scores, no policy findings, and no hook text.
+- No unresolved edge as a `dependsOn` target. The count is `lockward:unresolved-edges` on the root component. There is no `compositions` entry for the missing targets.
+- No second component when the same `name@version` is installed at more than one path. Fields that differ are merged; they are not listed per path.
+- No file inventory, no external references beyond the purl, and no evidence of whether an optional dependency was actually installed.

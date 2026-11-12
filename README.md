@@ -16,7 +16,7 @@ Built for teams that ship with lots of dependencies but have no dedicated AppSec
 - **Explainable heuristics** — obfuscation, large base64 blobs, network-in-build, `curl | sh`, shell-outs, secret-path access — every hit comes with a plain-language reason.
 - **Known-vulnerability matching** — queries the **OSV** database with a local cache, and a *no-silent-gaps* rule: an offline scan without advisory coverage **warns** instead of pretending everything is clean.
 - **Policy gate** — warn-first by default; YAML policies decide what blocks a build.
-- **SBOM** — **CycloneDX 1.6** output, schema-validated in CI.
+- **SBOM** — **CycloneDX 1.6** output, schema-validated in CI. See [SBOM](#sbom).
 - **CI-native** — PR comment + step summary via a GitHub Action.
 - **Safe by design** — `#![forbid(unsafe_code)]`, path-contained reads, bounded inputs, no package-code execution.
 - **Local-first, zero telemetry** — no account, runs fully offline if you need it to; online it only queries the public OSV advisory database, never your code.
@@ -39,7 +39,7 @@ Exit codes: `0` clean · `1` warnings/review · `2` fail (enforce mode) or runti
 
 ### In CI (GitHub Actions)
 ```yaml
-- uses: YaDe1804/lockward@v0.1.1   # from the GitHub Marketplace
+- uses: YaDe1804/lockward@v0.1.2   # from the GitHub Marketplace
   with:
     path: .
     mode: warn        # or "enforce"
@@ -59,6 +59,10 @@ Repo / lockfile → ingest → resolve → (advisories ∥ hooks ∥ heuristics)
 ```
 
 Static parsing only. Lockward reads `package-lock.json` (v2/v3) and the `package.json` of locked packages, builds the dependency graph, matches OSV advisories, runs the hook/heuristic rules, scores each package, and applies your policy. It never downloads or runs package tarballs or scripts.
+
+## SBOM
+
+`lockward scan . --format cyclonedx` writes a CycloneDX 1.6 document (`bom.cdx.json`). Each locked `name@version` is one component, with its package URL, license, and integrity hash when the lockfile has them. `scope` is `required`, `optional`, or `excluded` for a dev dependency. A dev dependency also has the property `lockward:dev` set to `true`. A peer dependency has `lockward:peer` set to `true` and keeps its scope. `dependencies` is the resolved lockfile graph: every component has an entry, `dependsOn` is sorted, and a component with no dependencies has an empty list. Edges the resolver could not place are counted as `lockward:unresolved-edges` on the root component. `serialNumber` follows the document content, so the same lockfile yields the same number. `metadata.timestamp` is the scan time. The mapping is ADR 015.
 
 ## Compliance: CRA & NIS2
 
@@ -100,7 +104,7 @@ cosign verify-blob \
 
 ## Detection quality
 
-Lockward publishes its detection numbers. On a 72-case corpus (16 malicious reconstructed from documented incidents, 56 benign including the hard native-build and downloader cases): **recall 94%, precision 88%, false-positive rate 3.6%**. Eight regression cases sit outside that score so a fixed bypass cannot raise it. The remaining false positives are legitimate packages that fetch a binary at install time — statically indistinguishable from a malicious staged downloader, so Lockward surfaces them as *review* rather than failing the build. Full method, results and limitations: [docs/BENCHMARK.md](docs/BENCHMARK.md).
+Lockward publishes its detection numbers. On a 72-case corpus (16 malicious reconstructed from documented incidents, 56 benign including the hard native-build and downloader cases): **recall 94%, precision 88%, false-positive rate 3.6%**. Nine regression cases sit outside that score so a fixed bypass cannot raise it. The remaining false positives are legitimate packages that fetch a binary at install time — statically indistinguishable from a malicious staged downloader, so Lockward surfaces them as *review* rather than failing the build. Full method, results and limitations: [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
 ## Commercial use
 

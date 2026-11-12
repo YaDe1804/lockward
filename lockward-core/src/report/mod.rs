@@ -11,6 +11,7 @@ use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE};
 use serde::Serialize;
 use serde_json::{Value, json};
+use std::collections::{BTreeMap, BTreeSet};
 use uuid::Uuid;
 
 /// Fixed timestamp used by golden tests.
@@ -194,33 +195,146 @@ fn render_json(analysis: &Analysis, scanned_at: &str) -> Result<String> {
     Ok(format!("{text}\n"))
 }
 
-fn render_cyclonedx(analysis: &Analysis, scanned_at: &str) -> Result<String> {
-    let mut components = Vec::new();
-    for package in analysis
-        .lock
+struct MergedPackage {
+    name: String,
+    version: String,
+    purl: String,
+    dev: bool,
+    optional: bool,
+    peer: bool,
+    license: Option<String>,
+    integrity: Option<String>,
+}
+
+impl MergedPackage {
+    fn from_package(package: &Package) -> Self {
+        Self {
+            purl: purl(&package.name, &package.version),
+            name: package.name.clone(),
+            version: package.version.clone(),
+            dev: package.dev,
+            optional: package.optional,
+            peer: package.peer,
+            license: package.license.clone(),
+            integrity: package.integrity.clone(),
+        }
+    }
+
+    /// The less restrictive scope wins. A string that is already set stays,
+    /// so the lexicographically smallest path that had a value keeps it.
+    fn merge(&mut self, package: &Package) {
+        if !package.dev && self.dev {
+            self.dev = false;
+            self.optional = package.optional;
+        } else if !self.dev && self.optional && !package.dev && !package.optional {
+            self.optional = false;
+        }
+        self.peer |= package.peer;
+        if self.license.is_none() {
+            self.license.clone_from(&package.license);
+        }
+        if self.integrity.is_none() {
+            self.integrity.clone_from(&package.integrity);
+        }
+    }
+
+    fn to_component(&self) -> Value {
+        let mut value = json!({
+            "type": "library",
+            "name": self.name,
+            "version": self.version,
+            "purl": self.purl,
+            "bom-ref": self.purl,
+        });
+        let (scope, properties) = scope_and_properties(self.dev, self.optional, self.peer);
+        value["scope"] = json!(scope);
+        if !properties.is_empty() {
+            value["properties"] = property_values(&properties);
+        }
+        if let Some(license) = &self.license {
+            value["licenses"] = json!([cyclonedx_license(license)]);
+        }
+        if let Some((alg, content)) = self.integrity.as_deref().and_then(sri_hash) {
+            value["hashes"] = json!([{ "alg": alg, "content": content }]);
+        }
+        value
+    }
+}
+
+fn property_values(properties: &[(&str, &str)]) -> Value {
+    json!(
+        properties
+            .iter()
+            .map(|(name, property_value)| json!({ "name": name, "value": property_value }))
+            .collect::<Vec<_>>()
+    )
+}
+
+fn bom_document(
+    lock: &crate::ingest::Lockfile,
+    graph: &crate::resolve::Graph,
+    scanned_at: &str,
+) -> Value {
+    let mut packages: Vec<&Package> = lock
         .packages
         .iter()
         .filter(|package| !package.is_root)
-    {
-        components.push(component(package));
+        .collect();
+    packages.sort_by(|left, right| left.path.cmp(&right.path));
+
+    let mut merged: BTreeMap<String, MergedPackage> = BTreeMap::new();
+    let mut path_ref: BTreeMap<&str, String> = BTreeMap::new();
+    for package in packages {
+        let component_ref = purl(&package.name, &package.version);
+        path_ref.insert(package.path.as_str(), component_ref.clone());
+        merged
+            .entry(component_ref)
+            .and_modify(|existing| existing.merge(package))
+            .or_insert_with(|| MergedPackage::from_package(package));
     }
-    components.sort_by(|left, right| {
-        left["purl"]
-            .as_str()
-            .unwrap_or("")
-            .cmp(right["purl"].as_str().unwrap_or(""))
-    });
-    let identity = components
+
+    let root = lock.root();
+    let root_name = root
+        .map(|package| package.name.as_str())
+        .unwrap_or("unknown");
+    let root_version = root
+        .map(|package| package.version.as_str())
+        .unwrap_or("0.0.0");
+    let root_ref = root
+        .map(|package| purl(&package.name, &package.version))
+        .unwrap_or_else(|| "pkg:generic/unknown@0.0.0".to_owned());
+    path_ref.insert("", root_ref.clone());
+
+    let mut depends: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    depends.insert(root_ref.clone(), BTreeSet::new());
+    for component_ref in merged.keys() {
+        depends.insert(component_ref.clone(), BTreeSet::new());
+    }
+    for edge in &graph.edges {
+        let from = graph.nodes[edge.from].package_path.as_str();
+        let to = graph.nodes[edge.to].package_path.as_str();
+        let (Some(from_ref), Some(to_ref)) = (path_ref.get(from), path_ref.get(to)) else {
+            continue;
+        };
+        depends
+            .entry(from_ref.clone())
+            .or_default()
+            .insert(to_ref.clone());
+    }
+
+    let components: Vec<Value> = merged.values().map(MergedPackage::to_component).collect();
+    let dependencies: Vec<Value> = depends
         .iter()
-        .filter_map(|component| component["purl"].as_str())
-        .collect::<Vec<_>>()
-        .join("\n");
-    let serial = Uuid::new_v5(&Uuid::NAMESPACE_OID, identity.as_bytes());
-    let root = analysis.lock.root();
-    let bom = json!({
+        .map(|(component_ref, targets)| {
+            json!({
+                "ref": component_ref,
+                "dependsOn": targets.iter().cloned().collect::<Vec<_>>()
+            })
+        })
+        .collect();
+    let mut bom = json!({
         "bomFormat": "CycloneDX",
         "specVersion": "1.6",
-        "serialNumber": format!("urn:uuid:{serial}"),
         "version": 1,
         "metadata": {
             "timestamp": scanned_at,
@@ -234,13 +348,75 @@ fn render_cyclonedx(analysis: &Analysis, scanned_at: &str) -> Result<String> {
             },
             "component": {
                 "type": "application",
-                "name": root.map(|package| package.name.as_str()).unwrap_or("unknown"),
-                "version": root.map(|package| package.version.as_str()).unwrap_or("0.0.0"),
-                "purl": root.map(|package| purl(&package.name, &package.version)).unwrap_or_else(|| "pkg:generic/unknown@0.0.0".to_owned())
+                "bom-ref": root_ref,
+                "name": root_name,
+                "version": root_version,
+                "purl": root_ref,
+                "properties": [{
+                    "name": "lockward:unresolved-edges",
+                    "value": graph.unresolved.len().to_string()
+                }]
             }
         },
-        "components": components
+        "components": components,
+        "dependencies": dependencies
     });
+    let serial = content_serial(&bom);
+    if let Some(object) = bom.as_object_mut() {
+        object.insert("serialNumber".to_owned(), json!(serial));
+    }
+    bom
+}
+
+/// RFC 4122 UUID v5 of the BOM with `serialNumber` and `metadata.timestamp` removed.
+///
+/// Object keys are sorted so two equivalent documents hash the same. CycloneDX
+/// recommends a fresh serial for every generated BOM; this content hash is the
+/// deliberate exception, recorded in ADR 015.
+fn content_serial(bom: &Value) -> String {
+    let mut canonical = bom.clone();
+    if let Some(object) = canonical.as_object_mut() {
+        object.remove("serialNumber");
+    }
+    if let Some(metadata) = canonical.get_mut("metadata").and_then(Value::as_object_mut) {
+        metadata.remove("timestamp");
+    }
+    let serial = Uuid::new_v5(&Uuid::NAMESPACE_OID, canonical_json(&canonical).as_bytes());
+    format!("urn:uuid:{serial}")
+}
+
+fn canonical_json(value: &Value) -> String {
+    match value {
+        Value::Null => "null".to_owned(),
+        Value::Bool(flag) => flag.to_string(),
+        Value::Number(number) => number.to_string(),
+        Value::String(text) => serde_json::to_string(text).unwrap_or_else(|_| "\"\"".to_owned()),
+        Value::Array(items) => {
+            let body = items
+                .iter()
+                .map(canonical_json)
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("[{body}]")
+        }
+        Value::Object(map) => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            let body = keys
+                .into_iter()
+                .map(|key| {
+                    let encoded = serde_json::to_string(key).unwrap_or_else(|_| "\"\"".to_owned());
+                    format!("{encoded}:{}", canonical_json(&map[key]))
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("{{{body}}}")
+        }
+    }
+}
+
+fn render_cyclonedx(analysis: &Analysis, scanned_at: &str) -> Result<String> {
+    let bom = bom_document(&analysis.lock, &analysis.graph, scanned_at);
     let text = serde_json::to_string_pretty(&bom).map_err(|source| Error::Json {
         path: "bom.cdx.json".to_owned(),
         source,
@@ -248,14 +424,51 @@ fn render_cyclonedx(analysis: &Analysis, scanned_at: &str) -> Result<String> {
     Ok(format!("{text}\n"))
 }
 
+/// CycloneDX 1.6 scope and Lockward properties for one lockfile package.
+///
+/// `dev` is `excluded` (non-runtime) and records `lockward:dev`. `optional`
+/// without `dev` is `optional`. Anything else is `required`. `peer` does not
+/// change the scope; it records `lockward:peer`. Property values are strings
+/// and the list is sorted by name.
+fn scope_and_properties(
+    dev: bool,
+    optional: bool,
+    peer: bool,
+) -> (&'static str, Vec<(&'static str, &'static str)>) {
+    let mut properties = Vec::new();
+    let scope = if dev {
+        properties.push(("lockward:dev", "true"));
+        "excluded"
+    } else if optional {
+        "optional"
+    } else {
+        "required"
+    };
+    if peer {
+        properties.push(("lockward:peer", "true"));
+    }
+    properties.sort_by_key(|property| property.0);
+    (scope, properties)
+}
+
+#[cfg(test)]
 fn component(package: &Package) -> Value {
     let mut value = json!({
         "type": "library",
         "name": package.name,
         "version": package.version,
         "purl": purl(&package.name, &package.version),
-        "scope": if package.dev { "optional" } else { "required" }
     });
+    let (scope, properties) = scope_and_properties(package.dev, package.optional, package.peer);
+    value["scope"] = json!(scope);
+    if !properties.is_empty() {
+        value["properties"] = json!(
+            properties
+                .iter()
+                .map(|(name, property_value)| json!({ "name": name, "value": property_value }))
+                .collect::<Vec<_>>()
+        );
+    }
     if let Some(license) = &package.license {
         value["licenses"] = json!([cyclonedx_license(license)]);
     }
@@ -587,6 +800,47 @@ mod tests {
     }
 
     #[test]
+    fn purl_encodes_a_scope_and_keeps_the_lockfile_case() {
+        assert_eq!(purl("@scope/pkg", "1.2.3"), "pkg:npm/%40scope/pkg@1.2.3");
+        assert_eq!(purl("Left-Pad", "1.0.0"), "pkg:npm/Left-Pad@1.0.0");
+        assert_eq!(purl("left-pad", "1.0.0"), "pkg:npm/left-pad@1.0.0");
+    }
+
+    #[test]
+    fn sri_hash_accepts_sha256_sha384_sha512_and_url_safe_base64() {
+        let cases = [
+            (
+                "sha256-ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=",
+                "SHA-256",
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            ),
+            (
+                "sha384-ywB1P0WjXou1oD1pmsZQBycsMqsO3tFjGotgWkP/W+2AhgcroefMI1i67KE0yCWn",
+                "SHA-384",
+                "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7",
+            ),
+            (
+                "sha512-3a81oZNherrMQXNJriBBMRLm+k6JqX6iCp7u5ktV05ohkpkqJ0/BqDa6PCOj/uu9RU1EI2Q86A4qmslPpUyknw==",
+                "SHA-512",
+                "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f",
+            ),
+            (
+                "sha256-ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0=",
+                "SHA-256",
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            ),
+        ];
+        for (integrity, alg, hex_digest) in cases {
+            let (got_alg, got_hex) = sri_hash(integrity).unwrap_or_else(|| panic!("{integrity}"));
+            assert_eq!(got_alg, alg, "{integrity}");
+            assert_eq!(got_hex, hex_digest, "{integrity}");
+        }
+        assert!(sri_hash("sha256-!!!!").is_none());
+        assert!(sri_hash("md5-ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=").is_none());
+        assert!(sri_hash("not-a-hash").is_none());
+    }
+
+    #[test]
     fn cyclonedx_license_uses_id_expression_or_name() {
         assert_eq!(
             cyclonedx_license("MIT"),
@@ -603,6 +857,336 @@ mod tests {
         assert_eq!(
             cyclonedx_license("MIT OR NOPE"),
             json!({ "license": { "name": "MIT OR NOPE" } })
+        );
+    }
+
+    fn flagged_package(dev: bool, optional: bool, peer: bool) -> Package {
+        Package {
+            path: "node_modules/pkg".to_owned(),
+            name: "pkg".to_owned(),
+            version: "1.0.0".to_owned(),
+            resolved: None,
+            integrity: None,
+            dev,
+            optional,
+            peer,
+            is_root: false,
+            has_install_script: false,
+            license: None,
+            dependencies: std::collections::BTreeMap::new(),
+            dev_dependencies: std::collections::BTreeMap::new(),
+            optional_dependencies: std::collections::BTreeMap::new(),
+            peer_dependencies: std::collections::BTreeMap::new(),
+            bins: std::collections::BTreeMap::new(),
+        }
+    }
+
+    fn property_pairs(component: &Value) -> Vec<(String, String)> {
+        component["properties"]
+            .as_array()
+            .map(|items| {
+                items
+                    .iter()
+                    .map(|item| {
+                        (
+                            item["name"].as_str().unwrap_or("").to_owned(),
+                            item["value"].as_str().unwrap_or("").to_owned(),
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn required_package_has_no_scope_property() {
+        let value = component(&flagged_package(false, false, false));
+        assert_eq!(value["scope"], "required");
+        assert!(value.get("properties").is_none());
+    }
+
+    #[test]
+    fn optional_package_is_optional_without_a_dev_property() {
+        let value = component(&flagged_package(false, true, false));
+        assert_eq!(value["scope"], "optional");
+        assert!(property_pairs(&value).is_empty());
+    }
+
+    #[test]
+    fn dev_package_is_excluded_and_marked() {
+        let value = component(&flagged_package(true, false, false));
+        assert_eq!(value["scope"], "excluded");
+        assert_eq!(
+            property_pairs(&value),
+            vec![("lockward:dev".to_owned(), "true".to_owned())]
+        );
+    }
+
+    #[test]
+    fn dev_and_optional_stays_excluded() {
+        let value = component(&flagged_package(true, true, false));
+        assert_eq!(value["scope"], "excluded");
+        assert_eq!(
+            property_pairs(&value),
+            vec![("lockward:dev".to_owned(), "true".to_owned())]
+        );
+    }
+
+    #[test]
+    fn peer_keeps_scope_and_sets_a_string_property() {
+        let value = component(&flagged_package(false, false, true));
+        assert_eq!(value["scope"], "required");
+        assert_eq!(
+            property_pairs(&value),
+            vec![("lockward:peer".to_owned(), "true".to_owned())]
+        );
+        let raw = &value["properties"][0]["value"];
+        assert!(raw.is_string());
+    }
+
+    const LIB_LOCK: &str = r#"{
+      "name": "app", "version": "1.0.0", "lockfileVersion": 3,
+      "packages": {
+        "": { "name": "app", "version": "1.0.0", "dependencies": { "lib": "1.0.0", "other": "1.0.0" } },
+        "node_modules/lib": { "version": "1.0.0", "license": "MIT" },
+        "node_modules/other": { "version": "1.0.0" }
+      }
+    }"#;
+
+    #[test]
+    fn serial_follows_content_not_path_or_timestamp() {
+        let flat = bom_of(LIB_LOCK);
+        let nested = bom_of(
+            r#"{
+              "name": "app", "version": "1.0.0", "lockfileVersion": 3,
+              "packages": {
+                "": { "name": "app", "version": "1.0.0", "dependencies": { "lib": "1.0.0", "other": "1.0.0" } },
+                "node_modules/lib": { "version": "1.0.0", "license": "MIT" },
+                "node_modules/extra/node_modules/lib": { "version": "1.0.0", "license": "MIT" },
+                "node_modules/other": { "version": "1.0.0" }
+              }
+            }"#,
+        );
+        assert_eq!(flat["serialNumber"], nested["serialNumber"]);
+        let lock = crate::ingest::parse_lockfile_str(LIB_LOCK, "bom.json").unwrap();
+        let graph = crate::resolve::resolve(&lock);
+        let later = bom_document(&lock, &graph, "2030-01-01T00:00:00Z");
+        assert_eq!(flat["serialNumber"], later["serialNumber"]);
+    }
+
+    #[test]
+    fn serial_changes_when_scope_or_edge_changes() {
+        let base = bom_of(LIB_LOCK);
+        let dev = bom_of(
+            r#"{
+              "name": "app", "version": "1.0.0", "lockfileVersion": 3,
+              "packages": {
+                "": { "name": "app", "version": "1.0.0", "dependencies": { "lib": "1.0.0", "other": "1.0.0" } },
+                "node_modules/lib": { "version": "1.0.0", "license": "MIT", "dev": true },
+                "node_modules/other": { "version": "1.0.0" }
+              }
+            }"#,
+        );
+        let linked = bom_of(
+            r#"{
+              "name": "app", "version": "1.0.0", "lockfileVersion": 3,
+              "packages": {
+                "": { "name": "app", "version": "1.0.0", "dependencies": { "lib": "1.0.0", "other": "1.0.0" } },
+                "node_modules/lib": { "version": "1.0.0", "license": "MIT", "dependencies": { "other": "1.0.0" } },
+                "node_modules/other": { "version": "1.0.0" }
+              }
+            }"#,
+        );
+        assert_ne!(base["serialNumber"], dev["serialNumber"]);
+        assert_ne!(base["serialNumber"], linked["serialNumber"]);
+    }
+
+    fn bom_of(lock_json: &str) -> Value {
+        let lock = crate::ingest::parse_lockfile_str(lock_json, "bom.json").unwrap();
+        let graph = crate::resolve::resolve(&lock);
+        bom_document(&lock, &graph, GOLDEN_TIMESTAMP)
+    }
+
+    fn refs_of(bom: &Value) -> std::collections::BTreeSet<String> {
+        let mut refs = std::collections::BTreeSet::new();
+        if let Some(component) = bom["metadata"]["component"].as_object() {
+            refs.insert(component["bom-ref"].as_str().unwrap_or("").to_owned());
+        }
+        for component in bom["components"].as_array().unwrap() {
+            refs.insert(component["bom-ref"].as_str().unwrap_or("").to_owned());
+        }
+        refs
+    }
+
+    #[test]
+    fn dependency_graph_refs_resolve_and_cover_every_component() {
+        let bom = bom_of(
+            r#"{
+              "name": "app", "version": "1.0.0", "lockfileVersion": 3,
+              "packages": {
+                "": { "name": "app", "version": "1.0.0", "dependencies": { "left-pad": "1.0.0", "missing": "1.0.0" } },
+                "node_modules/left-pad": { "version": "1.0.0" }
+              }
+            }"#,
+        );
+        assert_eq!(bom["metadata"]["component"]["bom-ref"], "pkg:npm/app@1.0.0");
+        assert_eq!(bom["components"][0]["bom-ref"], "pkg:npm/left-pad@1.0.0");
+        let refs = refs_of(&bom);
+        let dependencies = bom["dependencies"].as_array().expect("dependencies");
+        assert_eq!(dependencies.len(), refs.len());
+        for edge in dependencies {
+            let source = edge["ref"].as_str().unwrap();
+            assert!(refs.contains(source), "{source}");
+            for target in edge["dependsOn"].as_array().unwrap() {
+                let target = target.as_str().unwrap();
+                assert!(refs.contains(target), "{target}");
+                assert!(!target.contains("missing"));
+            }
+        }
+        let root = dependencies
+            .iter()
+            .find(|edge| edge["ref"] == "pkg:npm/app@1.0.0")
+            .unwrap();
+        assert_eq!(root["dependsOn"], json!(["pkg:npm/left-pad@1.0.0"]));
+        assert_eq!(
+            bom["metadata"]["component"]["properties"],
+            json!([{ "name": "lockward:unresolved-edges", "value": "1" }])
+        );
+    }
+
+    #[test]
+    fn duplicate_name_version_keeps_the_less_restrictive_scope() {
+        let bom = bom_of(
+            r#"{
+              "name": "app", "version": "1.0.0", "lockfileVersion": 3,
+              "packages": {
+                "": { "name": "app", "version": "1.0.0", "dependencies": { "lib": "1.0.0" } },
+                "node_modules/lib": { "name": "lib", "version": "1.0.0", "dev": true, "license": "MIT" },
+                "node_modules/wrapper/node_modules/lib": { "name": "lib", "version": "1.0.0", "license": "ISC" }
+              }
+            }"#,
+        );
+        let libs: Vec<_> = bom["components"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|component| component["name"] == "lib")
+            .collect();
+        assert_eq!(libs.len(), 1);
+        assert_eq!(libs[0]["scope"], "required");
+        assert!(libs[0].get("properties").is_none());
+        assert_eq!(libs[0]["licenses"][0]["license"]["id"], "MIT");
+    }
+
+    #[test]
+    fn cycles_stay_in_the_dependency_graph() {
+        let bom = bom_of(
+            r#"{
+              "name": "app", "version": "1.0.0", "lockfileVersion": 3,
+              "packages": {
+                "": { "name": "app", "version": "1.0.0", "dependencies": { "a": "1.0.0" } },
+                "node_modules/a": { "version": "1.0.0", "dependencies": { "b": "1.0.0" } },
+                "node_modules/b": { "version": "1.0.0", "dependencies": { "a": "1.0.0" } }
+              }
+            }"#,
+        );
+        let depends_on = |name: &str| {
+            let purl = format!("pkg:npm/{name}@1.0.0");
+            bom["dependencies"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|edge| edge["ref"] == purl)
+                .unwrap()["dependsOn"]
+                .clone()
+        };
+        assert_eq!(depends_on("a"), json!(["pkg:npm/b@1.0.0"]));
+        assert_eq!(depends_on("b"), json!(["pkg:npm/a@1.0.0"]));
+    }
+
+    #[test]
+    fn dev_optional_and_peer_edges_are_all_recorded() {
+        let bom = bom_of(
+            r#"{
+              "name": "app", "version": "1.0.0", "lockfileVersion": 3,
+              "packages": {
+                "": {
+                  "name": "app", "version": "1.0.0",
+                  "devDependencies": { "dev-tool": "1.0.0" },
+                  "optionalDependencies": { "opt": "1.0.0" },
+                  "peerDependencies": { "peer": "1.0.0" }
+                },
+                "node_modules/dev-tool": { "version": "1.0.0", "dev": true },
+                "node_modules/opt": { "version": "1.0.0", "optional": true },
+                "node_modules/peer": { "version": "1.0.0", "peer": true }
+              }
+            }"#,
+        );
+        let root = bom["dependencies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|edge| edge["ref"] == "pkg:npm/app@1.0.0")
+            .unwrap();
+        assert_eq!(
+            root["dependsOn"],
+            json!([
+                "pkg:npm/dev-tool@1.0.0",
+                "pkg:npm/opt@1.0.0",
+                "pkg:npm/peer@1.0.0"
+            ])
+        );
+        let by_name = |name: &str| {
+            bom["components"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|component| component["name"] == name)
+                .unwrap()
+                .clone()
+        };
+        assert_eq!(by_name("dev-tool")["scope"], "excluded");
+        assert_eq!(by_name("opt")["scope"], "optional");
+        assert_eq!(by_name("peer")["scope"], "required");
+        assert_eq!(by_name("peer")["properties"][0]["name"], "lockward:peer");
+    }
+
+    #[test]
+    fn package_order_does_not_change_the_graph() {
+        let first = bom_of(
+            r#"{
+              "name": "app", "version": "1.0.0", "lockfileVersion": 3,
+              "packages": {
+                "node_modules/b": { "version": "1.0.0" },
+                "": { "name": "app", "version": "1.0.0", "dependencies": { "a": "1.0.0", "b": "1.0.0" } },
+                "node_modules/a": { "version": "1.0.0" }
+              }
+            }"#,
+        );
+        let second = bom_of(
+            r#"{
+              "name": "app", "version": "1.0.0", "lockfileVersion": 3,
+              "packages": {
+                "node_modules/a": { "version": "1.0.0" },
+                "": { "name": "app", "version": "1.0.0", "dependencies": { "b": "1.0.0", "a": "1.0.0" } },
+                "node_modules/b": { "version": "1.0.0" }
+              }
+            }"#,
+        );
+        assert_eq!(first["components"], second["components"]);
+        assert_eq!(first["dependencies"], second["dependencies"]);
+    }
+
+    #[test]
+    fn dev_and_peer_properties_are_sorted() {
+        let value = component(&flagged_package(true, false, true));
+        assert_eq!(value["scope"], "excluded");
+        assert_eq!(
+            property_pairs(&value),
+            vec![
+                ("lockward:dev".to_owned(), "true".to_owned()),
+                ("lockward:peer".to_owned(), "true".to_owned()),
+            ]
         );
     }
 

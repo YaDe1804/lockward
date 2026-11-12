@@ -360,4 +360,99 @@ mod tests {
                 .all(|hit| hit.rule != "bin_shadow")
         );
     }
+
+    fn foreign_bin_spelling(bin: &str) {
+        let lock = format!(
+            r#"{{
+              "name": "app",
+              "version": "1.0.0",
+              "lockfileVersion": 3,
+              "packages": {{
+                "": {{ "name": "app", "version": "1.0.0" }},
+                "node_modules/native": {{ "version": "1.0.0" }},
+                "node_modules/evil": {{
+                  "name": "evil",
+                  "version": "9.9.9",
+                  "bin": {{ "{bin}": "bin.js" }}
+                }}
+              }}
+            }}"#
+        );
+        let manifest =
+            format!(r#"{{"name":"native","version":"1.0.0","scripts":{{"install":"{bin}"}}}}"#);
+        let analysis = scan_lock(&lock, &[("node_modules/native/package.json", &manifest)]);
+        let hook = analysis
+            .hooks
+            .findings
+            .iter()
+            .find(|finding| finding.package_name == "native")
+            .expect("native hook");
+        assert_ne!(
+            hook.disposition,
+            HookDisposition::TrustedBuild,
+            "{bin}: {:?}",
+            analysis.hooks.warnings
+        );
+        let marked = format!("declares bin `{bin}`");
+        assert!(
+            analysis.decision.violations.iter().any(|hit| {
+                hit.rule == "bin_shadow"
+                    && hit.package_name == "evil"
+                    && hit.message.contains(&marked)
+            }),
+            "{bin}: {:?}",
+            analysis.decision.violations
+        );
+    }
+
+    #[test]
+    fn foreign_bin_husky_capitalized_is_a_shadow() {
+        foreign_bin_spelling("Husky");
+    }
+
+    #[test]
+    fn foreign_bin_husky_cmd_is_a_shadow() {
+        foreign_bin_spelling("husky.cmd");
+    }
+
+    #[test]
+    fn foreign_bin_husky_exe_is_a_shadow() {
+        foreign_bin_spelling("HUSKY.EXE");
+    }
+
+    #[test]
+    fn publisher_husky_bin_is_not_a_finding() {
+        let analysis = scan_lock(
+            r#"{
+              "name": "app",
+              "version": "1.0.0",
+              "lockfileVersion": 3,
+              "packages": {
+                "": { "name": "app", "version": "1.0.0" },
+                "node_modules/husky": {
+                  "version": "9.1.7",
+                  "bin": { "husky": "bin.js" }
+                }
+              }
+            }"#,
+            &[(
+                "node_modules/husky/package.json",
+                r#"{"name":"husky","version":"9.1.7","scripts":{"install":"husky install"}}"#,
+            )],
+        );
+        let hook = analysis
+            .hooks
+            .findings
+            .iter()
+            .find(|finding| finding.package_name == "husky")
+            .expect("husky hook");
+        assert_eq!(hook.disposition, HookDisposition::TrustedBuild);
+        assert!(
+            analysis
+                .decision
+                .violations
+                .iter()
+                .all(|hit| hit.rule != "bin_shadow")
+        );
+    }
 }

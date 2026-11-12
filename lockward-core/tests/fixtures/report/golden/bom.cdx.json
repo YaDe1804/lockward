@@ -2,6 +2,7 @@
   "bomFormat": "CycloneDX",
   "components": [
     {
+      "bom-ref": "pkg:npm/left-pad@1.0.0",
       "hashes": [
         {
           "alg": "SHA-512",
@@ -22,9 +23,28 @@
       "version": "1.0.0"
     }
   ],
+  "dependencies": [
+    {
+      "dependsOn": [],
+      "ref": "pkg:npm/left-pad@1.0.0"
+    },
+    {
+      "dependsOn": [
+        "pkg:npm/left-pad@1.0.0"
+      ],
+      "ref": "pkg:npm/mini-app@1.0.0"
+    }
+  ],
   "metadata": {
     "component": {
+      "bom-ref": "pkg:npm/mini-app@1.0.0",
       "name": "mini-app",
+      "properties": [
+        {
+          "name": "lockward:unresolved-edges",
+          "value": "0"
+        }
+      ],
       "purl": "pkg:npm/mini-app@1.0.0",
       "type": "application",
       "version": "1.0.0"
@@ -36,12 +56,12 @@
           "author": "YaDe Labs",
           "name": "lockward",
           "type": "application",
-          "version": "0.1.0"
+          "version": "0.1.2"
         }
       ]
     }
   },
-  "serialNumber": "urn:uuid:3ef5a295-148a-585a-be59-86e34a113ff3",
+  "serialNumber": "urn:uuid:277b3f77-3cd7-5381-83d2-3861bfb18b3b",
   "specVersion": "1.6",
   "version": 1
 }
