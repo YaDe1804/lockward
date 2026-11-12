@@ -322,6 +322,10 @@ fn consider_install_scripts(
                 "Install-Hook `{}` in {}@{} enthält kein Verdachtssignal.",
                 hook.hook, hook.package_name, hook.package_version
             )),
+            crate::hooks::HookDisposition::Empty => notes.push(format!(
+                "Install hook `{}` in {}@{} has an empty body.",
+                hook.hook, hook.package_name, hook.package_version
+            )),
             crate::hooks::HookDisposition::Unverified | crate::hooks::HookDisposition::FlagOnly => {
                 violations.push(Violation {
                     rule: "install_scripts",

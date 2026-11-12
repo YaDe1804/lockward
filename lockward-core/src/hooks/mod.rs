@@ -31,11 +31,13 @@ mod command;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HookDisposition {
-    /// Every command is a known build tool (`node-gyp`, `husky`, …).
+    /// Every command is a known build tool (`node-gyp`, `husky`, …) invoked by bare name.
     TrustedBuild,
     /// The command line and any referenced local files were read.
     Inspected,
-    /// A referenced file could not be read inside the package directory.
+    /// The hook body is empty or only whitespace. npm treats that as a no-op.
+    Empty,
+    /// A referenced file could not be read, or the command is not a known form.
     Unverified,
     /// Lockfile `hasInstallScript` without a manifest body.
     FlagOnly,
