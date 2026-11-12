@@ -25,7 +25,10 @@ fn version_is_printed() {
         .arg("--version")
         .assert()
         .success()
-        .stdout(predicate::str::contains("lockward"));
+        .stdout(predicate::str::contains(concat!(
+            "lockward ",
+            env!("CARGO_PKG_VERSION")
+        )));
 }
 
 #[test]
