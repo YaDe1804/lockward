@@ -8,6 +8,10 @@
 
 /// Package names whose install-time download is expected.
 ///
+/// Strictly ascending and unique: [`known_downloader`] searches this slice
+/// with `binary_search`. `edgedriver` is intentionally absent; see
+/// `docs/LIMITS.md`.
+///
 /// `chromedriver`, `geckodriver`, `puppeteer`, `playwright`, `cypress` and
 /// `electron` fetch a browser or driver. `node-sass` and `sass-embedded` fetch
 /// a native stylesheet binary. `*-core` packages are the same fetchers without
@@ -29,4 +33,21 @@ pub static KNOWN_DOWNLOADERS: &[&str] = &[
 #[must_use]
 pub fn known_downloader(name: &str) -> bool {
     KNOWN_DOWNLOADERS.binary_search(&name).is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn known_downloaders_are_strictly_sorted_and_unique() {
+        let mut sorted = KNOWN_DOWNLOADERS.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(KNOWN_DOWNLOADERS, sorted.as_slice());
+        assert!(
+            !KNOWN_DOWNLOADERS.contains(&"edgedriver"),
+            "edgedriver stays off this list; see docs/LIMITS.md"
+        );
+    }
 }

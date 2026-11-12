@@ -43,3 +43,7 @@ A payload that appears only after the shell expands `$(...)`, a here-document, o
 A bare trusted name is not resolved through `PATH`. A package can shadow that name with a dependency bin in `node_modules/.bin`, or with its own `bin` field once npm has linked it into the parent `node_modules/.bin`. Dependency entries are symlinks, which Mode 1 does not follow. Own-`bin` shadowing is a residual risk. See ADR 014.
 
 A `--require` / `--import` value that is a bare module name is not resolved. Only a path-like preload is read.
+
+## `edgedriver` is not a known downloader
+
+`KNOWN_DOWNLOADERS` includes `chromedriver` and `geckodriver`. It does not include `edgedriver`. The list is a closed set of packages whose install-time download is expected (browsers, drivers, and the native stylesheet binaries). `edgedriver` fetches a driver the same way, and that text is the same shape as a malicious download. ADR 013 leaves `edgedriver` and `prisma` as residual findings: a download that is not piped into a shell stays a review, and the name is not added to hide a corpus hit. Putting `edgedriver` on the list would also hide that pattern under any other name that copied the same script.

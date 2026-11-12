@@ -15,6 +15,10 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+/// Bare command names treated as known build tools.
+///
+/// Strictly ascending and unique: `trusted_command` searches this slice with
+/// `binary_search`. A path-form `argv[0]` is not looked up here.
 const TRUSTED_COMMANDS: &[&str] = &[
     "@mapbox/node-pre-gyp",
     "cmake-js",
@@ -1211,6 +1215,14 @@ mod tests {
             "{extra}"
         );
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn trusted_commands_are_strictly_sorted_and_unique() {
+        let mut sorted = TRUSTED_COMMANDS.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(TRUSTED_COMMANDS, sorted.as_slice());
     }
 
     #[test]
