@@ -50,9 +50,13 @@ impl FileCache {
 
     /// Return a fresh cached advisory list.
     ///
-    /// `Ok(None)` means missing, unreadable, or stale. Stale entries stay on
-    /// disk until a successful refetch overwrites them. A missing `fetched_at`
-    /// (legacy files) is stale.
+    /// `Ok(None)` means missing, stale, or not valid JSON. Stale entries stay
+    /// on disk until a successful refetch overwrites them. A missing
+    /// `fetched_at` (legacy files) is stale.
+    ///
+    /// `Err` is a read that failed for a reason other than `NotFound`, for
+    /// example `NotADirectory` when the cache path is a file. Callers treat
+    /// that as a miss. They do not abort the scan.
     pub fn get(&self, name: &str, version: &str) -> Result<Option<Vec<Advisory>>> {
         let path = self.path_for(name, version);
         let text = match fs::read_to_string(&path) {

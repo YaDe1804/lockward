@@ -44,6 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Unverified`. An empty hook body is `Empty`.
 - Advisory cache writes use a unique temporary file and replace the target
   directly. A write failure is a report note. The scan result stays valid.
+- An advisory cache read that fails for a reason other than a missing file
+  is one note for the run and counts as a miss. Offline mode still reports
+  the coverage gap.
 - A release tag that is not `v` plus the workspace version stops the release
   workflow before the build.
 - A package that declares a trusted build command's `bin` name, and is not
