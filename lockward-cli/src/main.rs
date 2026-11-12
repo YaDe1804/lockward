@@ -282,7 +282,7 @@ fn write_report(
 }
 
 fn bail_output() -> Result<()> {
-    anyhow::bail!("--format all braucht --output <verzeichnis>");
+    anyhow::bail!("--format all needs --output <directory>");
 }
 
 fn utc_now() -> String {
