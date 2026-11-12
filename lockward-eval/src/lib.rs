@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 pub const SCANNED_AT: &str = "2026-10-13T00:00:00Z";
 
 const SCOPE: &str = "hooks_and_heuristics";
-const SCOPE_NOTE: &str = "Dieser Korpus misst Install-Hooks und Heuristiken und ist bewusst gutartig-lastig. Precision und FP-Rate sind die Leitkennzahlen. known_vulnerable bleibt offline ohne Cache leer und ist hier keine vollständige OSV-Messung.";
+const SCOPE_NOTE: &str = "This corpus measures install hooks and heuristics and is deliberately weighted toward benign cases. Precision and the false-positive rate are the headline figures. known_vulnerable stays empty offline without a cache and is not a complete OSV measurement here.";
 
 /// Policy rules that count as a detection. `advisory_coverage` and
 /// `new_dependencies` are intentionally absent.
@@ -39,7 +39,7 @@ const POLICY_DETECTIONS: &[&str] = &[
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// The corpus directory or a required child is missing.
-    #[error("Korpus fehlt oder ist unvollständig: {0}")]
+    #[error("corpus is missing or incomplete: {0}")]
     Missing(String),
     /// A `label.yaml` does not match the directory or the schema.
     #[error("Label {path}: {message}")]
@@ -54,10 +54,10 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     /// The report could not be encoded.
-    #[error("Report konnte nicht geschrieben werden: {0}")]
+    #[error("could not write the report: {0}")]
     Report(String),
     /// A regression case did not fail the scan.
-    #[error("Regressionsfall {case} ist {severity}, erwartet fail")]
+    #[error("regression case {case} is {severity}, expected fail")]
     Regression { case: String, severity: String },
 }
 
@@ -297,7 +297,7 @@ pub fn evaluate(corpus_dir: &Path, policy_path: &Path) -> Result<Report, Error> 
     Ok(assemble(policy_name, cases, regression))
 }
 
-/// Render the German summary, including every FN and FP.
+/// Render the text summary, including every false negative and false positive.
 pub fn render_text(report: &Report) -> String {
     let mut out = String::new();
     push(&mut out, &report.scope_note);
@@ -306,18 +306,18 @@ pub fn render_text(report: &Report) -> String {
     let malicious = report.confusion.tp + report.confusion.fn_count;
     push(
         &mut out,
-        &format!("Fälle: {benign} gutartig, {malicious} bösartig"),
+        &format!("Cases: {benign} benign, {malicious} malicious"),
     );
     push(&mut out, "");
     push(
         &mut out,
-        &format!("{:<18} {:>12} {:>14}", "", "markiert", "unmarkiert"),
+        &format!("{:<18} {:>12} {:>14}", "", "flagged", "not flagged"),
     );
     push(
         &mut out,
         &format!(
             "{:<18} {:>12} {:>14}",
-            "bösartig",
+            "malicious",
             format!("TP {}", report.confusion.tp),
             format!("FN {}", report.confusion.fn_count)
         ),
@@ -326,7 +326,7 @@ pub fn render_text(report: &Report) -> String {
         &mut out,
         &format!(
             "{:<18} {:>12} {:>14}",
-            "gutartig",
+            "benign",
             format!("FP {}", report.confusion.fp),
             format!("TN {}", report.confusion.tn)
         ),
@@ -365,16 +365,16 @@ pub fn render_text(report: &Report) -> String {
         &mut out,
         &format!("info                 {}", report.severity.info),
     );
-    push(&mut out, "Markierte Fälle");
+    push(&mut out, "Flagged cases");
     let flagged: Vec<_> = report.cases.iter().filter(|case| case.flagged).collect();
     if flagged.is_empty() {
-        push(&mut out, "(keine)");
+        push(&mut out, "(none)");
     }
     for case in flagged {
         push(&mut out, &format!("- {}  {}", case.id, case.severity));
     }
     push(&mut out, "");
-    push(&mut out, "FP-Rate nach Kohorte");
+    push(&mut out, "False-positive rate by cohort");
     push(
         &mut out,
         &format!("{:<24} {:>8} {:>10}  fp_rate", "cohort", "cases", "flagged"),
@@ -391,14 +391,14 @@ pub fn render_text(report: &Report) -> String {
     push(&mut out, "");
     push(
         &mut out,
-        "Regel-Recall (nur bösartige Fälle, expected_rules)",
+        "Rule recall (malicious cases only, expected_rules)",
     );
     push(
         &mut out,
         &format!("{:<22} {:>12}  misses", "rule", "hit/expected"),
     );
     if report.rule_recall.is_empty() {
-        push(&mut out, "(keine)");
+        push(&mut out, "(none)");
     }
     for rule in &report.rule_recall {
         let misses = if rule.misses.is_empty() {
@@ -418,7 +418,7 @@ pub fn render_text(report: &Report) -> String {
     push(&mut out, "");
     push(&mut out, "False negatives");
     if report.false_negatives.is_empty() {
-        push(&mut out, "(keine)");
+        push(&mut out, "(none)");
     }
     for miss in &report.false_negatives {
         push(
@@ -435,10 +435,10 @@ pub fn render_text(report: &Report) -> String {
     push(&mut out, "");
     push(
         &mut out,
-        "Regressionen (nicht in Precision, Recall, F1 und FP-Rate)",
+        "Regressions (not in precision, recall, F1, or the false-positive rate)",
     );
     if report.regression.is_empty() {
-        push(&mut out, "(keine)");
+        push(&mut out, "(none)");
     }
     for case in &report.regression {
         push(
@@ -466,7 +466,7 @@ pub fn render_text(report: &Report) -> String {
     push(&mut out, "");
     push(&mut out, "False positives");
     if report.false_positives.is_empty() {
-        push(&mut out, "(keine)");
+        push(&mut out, "(none)");
     }
     for hit in &report.false_positives {
         push(
@@ -516,20 +516,20 @@ fn evaluate_case(
         if label.expected != "malicious" {
             return Err(Error::Label {
                 path: id,
-                message: "Verzeichnis malicious oder regression erwartet expected: malicious"
+                message: "directory malicious or regression requires expected: malicious"
                     .to_owned(),
             });
         }
     } else if label.expected != "benign" {
         return Err(Error::Label {
             path: id,
-            message: "Verzeichnis benign erwartet expected: benign".to_owned(),
+            message: "directory benign requires expected: benign".to_owned(),
         });
     }
     if label.expected == "benign" && !label.expected_rules.is_empty() {
         return Err(Error::Label {
             path: id,
-            message: "gutartige Fälle brauchen expected_rules: []".to_owned(),
+            message: "benign cases require expected_rules: []".to_owned(),
         });
     }
     let analysis = analyze(
@@ -696,7 +696,7 @@ fn cohort_of(label: &Label, names: &BTreeSet<String>, id: &str) -> Result<String
         }
         return Err(Error::Label {
             path: id.to_owned(),
-            message: "gutartige Fälle brauchen cohort".to_owned(),
+            message: "benign cases require cohort".to_owned(),
         });
     };
     let downloader = names
@@ -718,7 +718,7 @@ fn cohort_of(label: &Label, names: &BTreeSet<String>, id: &str) -> Result<String
     if !ok {
         return Err(Error::Label {
             path: id.to_owned(),
-            message: format!("cohort {declared} passt nicht zu den Paketnamen"),
+            message: format!("cohort {declared} does not match the package names"),
         });
     }
     Ok(declared.to_owned())
@@ -761,7 +761,7 @@ fn read_label(path: &Path, id: &str) -> Result<Label, Error> {
         return Err(Error::Label {
             path: id.to_owned(),
             message: format!(
-                "expected muss malicious oder benign sein, war {}",
+                "expected must be malicious or benign, was {}",
                 label.expected
             ),
         });
@@ -769,7 +769,7 @@ fn read_label(path: &Path, id: &str) -> Result<Label, Error> {
     if label.source.trim().is_empty() {
         return Err(Error::Label {
             path: id.to_owned(),
-            message: "source fehlt".to_owned(),
+            message: "source is missing".to_owned(),
         });
     }
     Ok(label)
@@ -786,7 +786,7 @@ fn read_case_dirs(class_dir: &Path) -> Result<Vec<PathBuf>, Error> {
     dirs.sort();
     if dirs.is_empty() {
         return Err(Error::Missing(format!(
-            "{} enthält keine Fälle",
+            "{} contains no cases",
             class_dir.display()
         )));
     }
@@ -884,7 +884,7 @@ mod tests {
                     .fired
                     .iter()
                     .any(|rule| rule == "advisory_coverage" || rule == "new_dependencies"),
-                "{} zählt eine Nicht-Detektion: {:?}",
+                "{} counted a non-detection: {:?}",
                 case.id,
                 case.fired
             );
@@ -892,12 +892,12 @@ mod tests {
         let text = render_text(&first);
         assert!(text.contains("False negatives"));
         assert!(text.contains("False positives"));
-        assert!(text.contains("Regressionen"));
+        assert!(text.contains("Regressions"));
         assert_eq!(first.regression.len(), 9);
         assert!(first.regression.iter().all(|case| case.severity == "fail"));
         assert_eq!(first.cases.len(), 72);
         assert!(text.contains(SCOPE_NOTE));
-        assert!(text.contains("FP-Rate nach Kohorte"));
+        assert!(text.contains("False-positive rate by cohort"));
         assert!(text.contains("Fail vs. Review"));
     }
 
@@ -1044,7 +1044,7 @@ mod tests {
             let name = item.id.rsplit('/').next().unwrap_or("");
             assert!(
                 !lockward_core::policy::known_downloader(name),
-                "{name} wurde auf die Downloader-Liste gesetzt"
+                "{name} is on the known-downloader list"
             );
         }
     }
@@ -1108,7 +1108,7 @@ mod tests {
             }
             assert!(
                 text.lines().all(inert_payload_line),
-                "{} enthält ausführbaren Code",
+                "{} contains executable code",
                 path.display()
             );
         }
@@ -1140,7 +1140,7 @@ mod tests {
                     || body.starts_with("bun "));
             assert!(
                 quoted || readable,
-                "{} script {hook} ist kein inerter Marker: {body}",
+                "{} script {hook} is not an inert marker: {body}",
                 path.display()
             );
         }

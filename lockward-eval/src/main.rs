@@ -31,21 +31,20 @@ fn run() -> Result<(), String> {
             "--help" | "-h" => {
                 println!(
                     "lockward-eval [--corpus DIR] [--policy FILE] [--output FILE]\n\n\
-Scannt corpus/malicious und corpus/benign offline über lockward-core.\n\
-Schwellwerte werden nicht geprüft."
+Scans corpus/malicious and corpus/benign offline through lockward-core.\n\
+Thresholds are not checked."
                 );
                 return Ok(());
             }
             "--corpus" => corpus = PathBuf::from(next_value(&mut args, "--corpus")?),
             "--policy" => policy = PathBuf::from(next_value(&mut args, "--policy")?),
             "--output" => output = PathBuf::from(next_value(&mut args, "--output")?),
-            other => return Err(format!("unbekanntes Argument: {other}")),
+            other => return Err(format!("unknown argument: {other}")),
         }
     }
     lockward_eval::run(&corpus, &policy, &output).map_err(|err| err.to_string())
 }
 
 fn next_value(args: &mut impl Iterator<Item = String>, flag: &str) -> Result<String, String> {
-    args.next()
-        .ok_or_else(|| format!("{flag} braucht einen Wert"))
+    args.next().ok_or_else(|| format!("{flag} needs a value"))
 }
