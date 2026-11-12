@@ -223,7 +223,8 @@ fn normalize_package(
 /// package.json shorthand: the command name is the package name, and a scoped
 /// name keeps only the part after `/` (`@mapbox/node-pre-gyp` → `node-pre-gyp`).
 /// That is `normalize-package-data`'s `fixBinField` and the basename step in
-/// `@npmcli/package-json`.
+/// `@npmcli/package-json`. The stored command keeps the lockfile spelling.
+/// Trust comparison folds case and a trailing `.cmd`, `.exe`, or `.bat` later.
 fn normalize_bins(bin: Option<RawBin>, package_name: &str) -> BTreeMap<String, String> {
     let mut bins = BTreeMap::new();
     match bin {
@@ -250,7 +251,7 @@ fn installed_bin_name(raw: &str) -> Option<String> {
     if base.is_empty() {
         None
     } else {
-        Some(base.to_ascii_lowercase())
+        Some(base.to_owned())
     }
 }
 

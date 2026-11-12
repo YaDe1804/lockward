@@ -28,6 +28,7 @@ const SCOPE_NOTE: &str = "Dieser Korpus misst Install-Hooks und Heuristiken und 
 /// Policy rules that count as a detection. `advisory_coverage` and
 /// `new_dependencies` are intentionally absent.
 const POLICY_DETECTIONS: &[&str] = &[
+    "bin_shadow",
     "install_scripts",
     "no_outbound_build",
     "secret_path_access",
@@ -892,7 +893,7 @@ mod tests {
         assert!(text.contains("False negatives"));
         assert!(text.contains("False positives"));
         assert!(text.contains("Regressionen"));
-        assert_eq!(first.regression.len(), 8);
+        assert_eq!(first.regression.len(), 9);
         assert!(first.regression.iter().all(|case| case.severity == "fail"));
         assert_eq!(first.cases.len(), 72);
         assert!(text.contains(SCOPE_NOTE));
@@ -996,6 +997,7 @@ mod tests {
             "regression/backtick-subst-husky",
             "regression/quoted-subst-node-gyp",
             "regression/process-subst-husky",
+            "regression/cmd-suffix-husky",
         ] {
             let item = regression(id);
             assert_eq!(item.severity, "fail", "{id}");

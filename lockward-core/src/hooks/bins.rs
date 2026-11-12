@@ -73,15 +73,19 @@ pub fn bin_shadows(packages: &[Package]) -> Vec<BinShadow> {
 pub fn shadowed_commands(packages: &[Package]) -> BTreeSet<String> {
     bin_shadows(packages)
         .into_iter()
-        .map(|shadow| shadow.command)
+        .map(|shadow| super::command::program_name(&shadow.command))
         .collect()
 }
 
 /// Publisher names for a trusted command, when it is in the table.
+///
+/// `command` is normalized with [`super::command::program_name`] before the
+/// lookup. `Husky`, `husky.cmd`, and `HUSKY.EXE` all resolve to `husky`.
 #[must_use]
 pub fn publishers_for(command: &str) -> Option<&'static [&'static str]> {
+    let name = super::command::program_name(command);
     TRUSTED_BIN_PUBLISHERS
-        .binary_search_by_key(&command, |row| row.0)
+        .binary_search_by_key(&name.as_str(), |row| row.0)
         .ok()
         .map(|index| TRUSTED_BIN_PUBLISHERS[index].1)
 }

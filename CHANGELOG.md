@@ -54,6 +54,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A package that declares a trusted build command's `bin` name, and is not
   that command's publisher, is reported as `bin_shadow`. Hooks that call the
   bare name are `unverified` in that project.
+- A trusted bin is compared with the same normalization as the hook command:
+  ASCII lower case, then one trailing `.cmd`, `.exe`, or `.bat`. `Husky`,
+  `husky.cmd`, and `HUSKY.EXE` shadow `husky`. The finding quotes the
+  lockfile spelling. One inert regression case covers `husky.cmd` and stays
+  outside the 72-case metrics.
 - A trusted command is not a trusted build when its arguments run shell
   syntax. `$(...)` and backticks are walked like `sh -c`, including inside
   double quotes. Process substitution, subshells, brace groups,
