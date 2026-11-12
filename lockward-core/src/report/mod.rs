@@ -323,12 +323,6 @@ fn bom_document(
     }
 
     let components: Vec<Value> = merged.values().map(MergedPackage::to_component).collect();
-    let identity = components
-        .iter()
-        .filter_map(|component| component["purl"].as_str())
-        .collect::<Vec<_>>()
-        .join("\n");
-    let serial = Uuid::new_v5(&Uuid::NAMESPACE_OID, identity.as_bytes());
     let dependencies: Vec<Value> = depends
         .iter()
         .map(|(component_ref, targets)| {
@@ -338,10 +332,9 @@ fn bom_document(
             })
         })
         .collect();
-    json!({
+    let mut bom = json!({
         "bomFormat": "CycloneDX",
         "specVersion": "1.6",
-        "serialNumber": format!("urn:uuid:{serial}"),
         "version": 1,
         "metadata": {
             "timestamp": scanned_at,
@@ -367,7 +360,59 @@ fn bom_document(
         },
         "components": components,
         "dependencies": dependencies
-    })
+    });
+    let serial = content_serial(&bom);
+    if let Some(object) = bom.as_object_mut() {
+        object.insert("serialNumber".to_owned(), json!(serial));
+    }
+    bom
+}
+
+/// RFC 4122 UUID v5 of the BOM with `serialNumber` and `metadata.timestamp` removed.
+///
+/// Object keys are sorted so two equivalent documents hash the same. CycloneDX
+/// recommends a fresh serial for every generated BOM; this content hash is the
+/// deliberate exception, recorded in ADR 015.
+fn content_serial(bom: &Value) -> String {
+    let mut canonical = bom.clone();
+    if let Some(object) = canonical.as_object_mut() {
+        object.remove("serialNumber");
+    }
+    if let Some(metadata) = canonical.get_mut("metadata").and_then(Value::as_object_mut) {
+        metadata.remove("timestamp");
+    }
+    let serial = Uuid::new_v5(&Uuid::NAMESPACE_OID, canonical_json(&canonical).as_bytes());
+    format!("urn:uuid:{serial}")
+}
+
+fn canonical_json(value: &Value) -> String {
+    match value {
+        Value::Null => "null".to_owned(),
+        Value::Bool(flag) => flag.to_string(),
+        Value::Number(number) => number.to_string(),
+        Value::String(text) => serde_json::to_string(text).unwrap_or_else(|_| "\"\"".to_owned()),
+        Value::Array(items) => {
+            let body = items
+                .iter()
+                .map(canonical_json)
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("[{body}]")
+        }
+        Value::Object(map) => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            let body = keys
+                .into_iter()
+                .map(|key| {
+                    let encoded = serde_json::to_string(key).unwrap_or_else(|_| "\"\"".to_owned());
+                    format!("{encoded}:{}", canonical_json(&map[key]))
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("{{{body}}}")
+        }
+    }
 }
 
 fn render_cyclonedx(analysis: &Analysis, scanned_at: &str) -> Result<String> {
@@ -856,6 +901,63 @@ mod tests {
         );
         let raw = &value["properties"][0]["value"];
         assert!(raw.is_string());
+    }
+
+    const LIB_LOCK: &str = r#"{
+      "name": "app", "version": "1.0.0", "lockfileVersion": 3,
+      "packages": {
+        "": { "name": "app", "version": "1.0.0", "dependencies": { "lib": "1.0.0", "other": "1.0.0" } },
+        "node_modules/lib": { "version": "1.0.0", "license": "MIT" },
+        "node_modules/other": { "version": "1.0.0" }
+      }
+    }"#;
+
+    #[test]
+    fn serial_follows_content_not_path_or_timestamp() {
+        let flat = bom_of(LIB_LOCK);
+        let nested = bom_of(
+            r#"{
+              "name": "app", "version": "1.0.0", "lockfileVersion": 3,
+              "packages": {
+                "": { "name": "app", "version": "1.0.0", "dependencies": { "lib": "1.0.0", "other": "1.0.0" } },
+                "node_modules/lib": { "version": "1.0.0", "license": "MIT" },
+                "node_modules/extra/node_modules/lib": { "version": "1.0.0", "license": "MIT" },
+                "node_modules/other": { "version": "1.0.0" }
+              }
+            }"#,
+        );
+        assert_eq!(flat["serialNumber"], nested["serialNumber"]);
+        let lock = crate::ingest::parse_lockfile_str(LIB_LOCK, "bom.json").unwrap();
+        let graph = crate::resolve::resolve(&lock);
+        let later = bom_document(&lock, &graph, "2030-01-01T00:00:00Z");
+        assert_eq!(flat["serialNumber"], later["serialNumber"]);
+    }
+
+    #[test]
+    fn serial_changes_when_scope_or_edge_changes() {
+        let base = bom_of(LIB_LOCK);
+        let dev = bom_of(
+            r#"{
+              "name": "app", "version": "1.0.0", "lockfileVersion": 3,
+              "packages": {
+                "": { "name": "app", "version": "1.0.0", "dependencies": { "lib": "1.0.0", "other": "1.0.0" } },
+                "node_modules/lib": { "version": "1.0.0", "license": "MIT", "dev": true },
+                "node_modules/other": { "version": "1.0.0" }
+              }
+            }"#,
+        );
+        let linked = bom_of(
+            r#"{
+              "name": "app", "version": "1.0.0", "lockfileVersion": 3,
+              "packages": {
+                "": { "name": "app", "version": "1.0.0", "dependencies": { "lib": "1.0.0", "other": "1.0.0" } },
+                "node_modules/lib": { "version": "1.0.0", "license": "MIT", "dependencies": { "other": "1.0.0" } },
+                "node_modules/other": { "version": "1.0.0" }
+              }
+            }"#,
+        );
+        assert_ne!(base["serialNumber"], dev["serialNumber"]);
+        assert_ne!(base["serialNumber"], linked["serialNumber"]);
     }
 
     fn bom_of(lock_json: &str) -> Value {
