@@ -157,7 +157,11 @@ pub struct Violation {
     pub configured_action: Action,
     /// Action after warn-first downgrade.
     pub effective_action: Action,
-    /// Explanation shown in the report.
+    /// Lockfile path. Empty when the finding is not package-scoped.
+    pub package_path: String,
+    /// Stable disambiguator: hook name, advisory id, or rule id. Not display text.
+    pub subject: String,
+    /// Explanation shown in the report. Not part of the sort key.
     pub message: String,
 }
 
@@ -170,7 +174,7 @@ pub struct Decision {
     pub outcome: Outcome,
     /// Process exit code: 0 ok, 1 warn, 2 fail.
     pub exit_code: u8,
-    /// Violations, sorted by rule and package.
+    /// Violations, sorted by rule, package, path, and subject. Not by message text.
     pub violations: Vec<Violation>,
     /// Non-blocking notes, for example a missing baseline.
     pub notes: Vec<String>,
@@ -279,14 +283,8 @@ pub fn decide(policy: &Policy, input: Evaluation<'_>) -> Decision {
     for violation in &mut violations {
         violation.effective_action = effective(policy.mode, violation.configured_action);
     }
-    violations.sort_by(|left, right| {
-        left.rule
-            .cmp(right.rule)
-            .then(left.package_name.cmp(&right.package_name))
-            .then(left.package_version.cmp(&right.package_version))
-            .then(left.message.cmp(&right.message))
-    });
-    notes.sort();
+    violations.sort_by(violation_order);
+    retain_unique_notes(&mut notes);
     let exit_code = exit_code(policy.mode, &violations);
     Decision {
         mode: policy.mode,
@@ -309,6 +307,8 @@ fn consider_bin_shadows(policy: &Policy, shadows: &[BinShadow], violations: &mut
             rule: "bin_shadow",
             package_name: shadow.package_name.clone(),
             package_version: shadow.package_version.clone(),
+            package_path: shadow.package_path.clone(),
+            subject: shadow.command.clone(),
             configured_action: rule.action,
             effective_action: rule.action,
             message: format!(
@@ -365,6 +365,8 @@ fn consider_install_scripts(
                     rule: "install_scripts",
                     package_name: hook.package_name.clone(),
                     package_version: hook.package_version.clone(),
+                    package_path: hook.package_path.clone(),
+                    subject: hook.hook.clone(),
                     configured_action: Action::Review,
                     effective_action: Action::Review,
                     message: format!(
@@ -407,6 +409,8 @@ fn consider_outbound(
             rule: "no_outbound_build",
             package_name: finding.package_name.clone(),
             package_version: finding.package_version.clone(),
+            package_path: finding.package_path.clone(),
+            subject: format!("{}\n{}", finding.hook, finding.rule_id),
             configured_action: action,
             effective_action: action,
             message: outbound_message(finding),
@@ -457,6 +461,8 @@ fn consider_execution(heuristics: &[HeuristicFinding], violations: &mut Vec<Viol
             rule: finding.rule_id,
             package_name: finding.package_name.clone(),
             package_version: finding.package_version.clone(),
+            package_path: finding.package_path.clone(),
+            subject: finding.hook.clone(),
             configured_action: Action::Fail,
             effective_action: Action::Fail,
             message,
@@ -491,6 +497,8 @@ fn consider_new_dependencies(
             rule: "new_dependencies",
             package_name: node.name.clone(),
             package_version: node.version.clone(),
+            package_path: node.package_path.clone(),
+            subject: String::new(),
             configured_action: rule.action,
             effective_action: rule.action,
             message: format!(
@@ -519,6 +527,8 @@ fn consider_vulnerabilities(
                 rule: "known_vulnerable",
                 package_name: package.name.clone(),
                 package_version: package.version.clone(),
+                package_path: package.package_path.clone(),
+                subject: advisory.id.clone(),
                 configured_action: rule.action,
                 effective_action: rule.action,
                 message: format!(
@@ -548,6 +558,8 @@ fn consider_advisory_coverage(
             rule: "advisory_coverage",
             package_name: String::new(),
             package_version: String::new(),
+            package_path: String::new(),
+            subject: String::new(),
             configured_action: rule.action,
             effective_action: rule.action,
             message: format!(
@@ -575,6 +587,8 @@ fn consider_secrets(
             rule: "secret_path_access",
             package_name: finding.package_name.clone(),
             package_version: finding.package_version.clone(),
+            package_path: finding.package_path.clone(),
+            subject: format!("{}\n{}", finding.hook, finding.evidence),
             configured_action: rule.action,
             effective_action: rule.action,
             message: format!(
@@ -643,6 +657,24 @@ fn exit_code(mode: Mode, violations: &[Violation]) -> u8 {
             }
         }
     }
+}
+
+fn violation_order(left: &Violation, right: &Violation) -> std::cmp::Ordering {
+    left.rule
+        .cmp(right.rule)
+        .then(left.package_name.cmp(&right.package_name))
+        .then(left.package_version.cmp(&right.package_version))
+        .then(left.package_path.cmp(&right.package_path))
+        .then(left.subject.cmp(&right.subject))
+}
+
+/// Drop repeated notes and keep the first occurrence.
+///
+/// Order is insertion order. Sorting by the sentence would move rows when the
+/// wording changes.
+pub fn retain_unique_notes(notes: &mut Vec<String>) {
+    let mut seen = BTreeSet::new();
+    notes.retain(|note| seen.insert(note.clone()));
 }
 
 fn outcome(exit_code: u8) -> Outcome {
@@ -1183,5 +1215,52 @@ rules:
         let err = parse_policy_str(text, "bad.yaml").unwrap_err();
         assert!(matches!(err, Error::Policy { .. }), "{err}");
         assert!(err.to_string().contains("version"));
+    }
+
+    #[test]
+    fn violation_order_ignores_message_text() {
+        let mut rows = [
+            Violation {
+                rule: "no_outbound_build",
+                package_name: "pkg".to_owned(),
+                package_version: "1.0.0".to_owned(),
+                package_path: "node_modules/pkg".to_owned(),
+                configured_action: Action::Fail,
+                effective_action: Action::Fail,
+                subject: "postinstall\nLW-H004".to_owned(),
+                message: "alpha".to_owned(),
+            },
+            Violation {
+                rule: "no_outbound_build",
+                package_name: "pkg".to_owned(),
+                package_version: "1.0.0".to_owned(),
+                package_path: "node_modules/pkg".to_owned(),
+                configured_action: Action::Review,
+                effective_action: Action::Review,
+                subject: "postinstall\nLW-H003".to_owned(),
+                message: "zebra".to_owned(),
+            },
+        ];
+        rows.sort_by(violation_order);
+        assert_eq!(rows[0].subject, "postinstall\nLW-H003");
+        rows[0].message = "zebra".to_owned();
+        rows[1].message = "alpha".to_owned();
+        rows.sort_by(violation_order);
+        assert_eq!(rows[0].subject, "postinstall\nLW-H003");
+        assert_eq!(rows[1].subject, "postinstall\nLW-H004");
+    }
+
+    #[test]
+    fn notes_keep_the_first_occurrence() {
+        let mut notes = vec![
+            "zebra note".to_owned(),
+            "alpha note".to_owned(),
+            "zebra note".to_owned(),
+        ];
+        retain_unique_notes(&mut notes);
+        assert_eq!(
+            notes,
+            vec!["zebra note".to_owned(), "alpha note".to_owned()]
+        );
     }
 }

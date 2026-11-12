@@ -27,6 +27,9 @@ pub struct Explanation {
     pub source: String,
     /// German reason.
     pub text: String,
+    /// Hook and evidence, or the advisory id. Not display text.
+    #[serde(skip)]
+    pub sort_key: String,
 }
 
 /// Score for a single package.
@@ -165,6 +168,7 @@ pub fn score_parts(
                 explanations.push(Explanation {
                     source: advisory.id.clone(),
                     text: advisory_sentence(&name, &version, advisory),
+                    sort_key: advisory.id.clone(),
                 });
             }
         }
@@ -187,16 +191,13 @@ pub fn score_parts(
                 explanations.push(Explanation {
                     source: finding.rule_id.to_owned(),
                     text: finding.explanation.clone(),
+                    sort_key: format!("{}\n{}", finding.hook, finding.evidence),
                 });
             }
         }
         heuristic_points = heuristic_points.min(HEURISTIC_CAP);
 
-        explanations.sort_by(|left, right| {
-            left.source
-                .cmp(&right.source)
-                .then(left.text.cmp(&right.text))
-        });
+        explanations.sort_by(explanation_order);
         let total = advisory_points.saturating_add(heuristic_points).min(100);
         scored.push(PackageScore {
             package_path: path,
@@ -235,6 +236,12 @@ fn advisory_sentence(name: &str, version: &str, advisory: &crate::advisories::Ad
         advisory.id,
         severity_de(advisory.severity)
     )
+}
+
+fn explanation_order(left: &Explanation, right: &Explanation) -> std::cmp::Ordering {
+    left.source
+        .cmp(&right.source)
+        .then(left.sort_key.cmp(&right.sort_key))
 }
 
 fn severity_de(severity: Severity) -> &'static str {
@@ -365,6 +372,29 @@ mod tests {
         assert_eq!(scored.packages[0].score, ADVISORY_CAP);
         assert_eq!(scored.packages[0].explanations.len(), 3);
         assert_eq!(scored.project_severity, Severity::High);
+    }
+
+    #[test]
+    fn explanation_order_ignores_the_sentence() {
+        let mut rows = [
+            Explanation {
+                source: "LW-H003".to_owned(),
+                text: "zebra".to_owned(),
+                sort_key: "postinstall\ncurl".to_owned(),
+            },
+            Explanation {
+                source: "LW-H003".to_owned(),
+                text: "alpha".to_owned(),
+                sort_key: "install\ncurl".to_owned(),
+            },
+        ];
+        rows.sort_by(explanation_order);
+        assert_eq!(rows[0].sort_key, "install\ncurl");
+        rows[0].text = "zebra".to_owned();
+        rows[1].text = "alpha".to_owned();
+        rows.sort_by(explanation_order);
+        assert_eq!(rows[0].sort_key, "install\ncurl");
+        assert_eq!(rows[1].sort_key, "postinstall\ncurl");
     }
 
     #[test]
