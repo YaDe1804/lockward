@@ -800,6 +800,47 @@ mod tests {
     }
 
     #[test]
+    fn purl_encodes_a_scope_and_keeps_the_lockfile_case() {
+        assert_eq!(purl("@scope/pkg", "1.2.3"), "pkg:npm/%40scope/pkg@1.2.3");
+        assert_eq!(purl("Left-Pad", "1.0.0"), "pkg:npm/Left-Pad@1.0.0");
+        assert_eq!(purl("left-pad", "1.0.0"), "pkg:npm/left-pad@1.0.0");
+    }
+
+    #[test]
+    fn sri_hash_accepts_sha256_sha384_sha512_and_url_safe_base64() {
+        let cases = [
+            (
+                "sha256-ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=",
+                "SHA-256",
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            ),
+            (
+                "sha384-ywB1P0WjXou1oD1pmsZQBycsMqsO3tFjGotgWkP/W+2AhgcroefMI1i67KE0yCWn",
+                "SHA-384",
+                "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7",
+            ),
+            (
+                "sha512-3a81oZNherrMQXNJriBBMRLm+k6JqX6iCp7u5ktV05ohkpkqJ0/BqDa6PCOj/uu9RU1EI2Q86A4qmslPpUyknw==",
+                "SHA-512",
+                "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f",
+            ),
+            (
+                "sha256-ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0=",
+                "SHA-256",
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            ),
+        ];
+        for (integrity, alg, hex_digest) in cases {
+            let (got_alg, got_hex) = sri_hash(integrity).unwrap_or_else(|| panic!("{integrity}"));
+            assert_eq!(got_alg, alg, "{integrity}");
+            assert_eq!(got_hex, hex_digest, "{integrity}");
+        }
+        assert!(sri_hash("sha256-!!!!").is_none());
+        assert!(sri_hash("md5-ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=").is_none());
+        assert!(sri_hash("not-a-hash").is_none());
+    }
+
+    #[test]
     fn cyclonedx_license_uses_id_expression_or_name() {
         assert_eq!(
             cyclonedx_license("MIT"),
