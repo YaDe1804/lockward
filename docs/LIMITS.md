@@ -9,34 +9,58 @@ Mode 1 does not execute hook text. `lockward-core` splits a hook body into comma
 - Single and double quotes group words. Separators inside quotes are literal text.
 - An empty or whitespace-only body has no commands. Its disposition is `empty`.
 
-## What the splitter does not understand
+## What is evaluated
 
-These constructs are not interpreted:
+The scan is still lexical. It does not execute the hook. These forms are walked again with the same rules as the outer hook, up to three levels, and they share the eight-file script budget with `sh -c`:
 
+- Command substitution `$(...)` and backticks, including inside double quotes.
+- The command inside process substitution `<(...)` and `>(...)`. The segment itself stays `unverified`, because the pipe is not modeled. The body is still read.
+- `sh -c`, `bash -c`, `zsh -c`, and `dash -c`.
+- The text after `eval`, and the path operand of `source` and `.`.
+
+A fourth nested level is `unverified` and is not read. A substitution that is not balanced is not walked. That segment is `unverified`, with a warning.
+
+Single quotes hide the text inside them. `husky '$(echo ok)'` is the literal argument `$(echo ok)` and stays a trusted build. Double quotes do not hide `$` or backticks.
+
+## What stays allowed on a trusted command
+
+A bare name in `TRUSTED_COMMANDS` stays a trusted build when the only extra shell syntax is one of these:
+
+- Output redirection: `> file`, `>> file`, `>/dev/null`, and `&>`.
+- A file-descriptor duplicate with digits on the right, such as `2>&1`.
+- A plain parameter `$NAME` or `${NAME}`, where `NAME` is an identifier (`[A-Za-z_][A-Za-z0-9_]*`).
+
+The 56 benign corpus hooks contain none of these forms. The allow list is the redirection and parameter syntax a build command actually uses, not a pattern copied from the corpus. See ADR 014.
+
+## What is not evaluated
+
+Anything else in the raw segment makes that segment `unverified`. It is not a trusted build, and it is not `inspected`. The report carries a warning. This includes:
+
+- Parameter forms other than a plain name: `${NAME:-default}`, `$?`, `$$`, and a dangling `$`.
+- A subshell `(...)`. A balanced body is walked, and the segment is still `unverified`.
+- A brace group `{ ...; }`.
+- A here-document (`<<` or `<<-`) or a here-string. The newline already starts a new command, so the here-document body is not recovered as data.
+- Input redirection (`< file`).
+- `eval`, `source`, or `.` as the command.
 - Backslash escapes, including `\"`, `\'`, and a trailing `\` used as a line continuation.
-- Command substitution: `$(...)` and backticks.
-- Here-documents (`<<` and `<<-`).
-- Shell comments (`# ...`).
-- Parameter expansion, globbing, and `PATH` lookup.
+- Shell comments (`# ...`), globbing, and `PATH` lookup.
 
 A backslash does not protect the next character. In particular, `\"` inside a double-quoted word ends the quote, because `"` is still the quote marker.
 
 A newline is always a command separator. A trailing `\` does not join the next line.
 
-## How those inputs are classified
+## How a command is classified
 
-The splitter keeps the characters it does not understand as literal token text, then the normal rules from ADR 014 are applied to whatever argv that produces:
+After the expansions above are walked:
 
-- A bare name in `TRUSTED_COMMANDS` is a trusted build command.
+- A bare name in `TRUSTED_COMMANDS` is a trusted build command only when the segment has no unevaluated shell syntax.
 - Recognized inline source (`node -e`, `python -c`, `bun -e`, `deno eval`, and the other inline forms in ADR 014) stays in the hook body.
 - A path, or an interpreter plus a script path, is read as a local file when the read is allowed. `\` in a script path is rewritten to `/` before the escape, symlink, and canonicalize checks.
 - Anything else is `unverified`, and the report carries a warning. It is not `inspected`.
 
 The original hook string is still handed to the heuristics unchanged. A `curl | sh` that the splitter divides into two commands can still match `LW-H004`, because that rule scans the raw text.
 
-A payload that appears only after the shell expands `$(...)`, a here-document, or a backslash continuation is not recovered. Mode 1 will not run the hook to find it. If the literal command is not trusted, not inline, and not a readable script, the disposition is `unverified`.
-
-`sh -c` / `bash -c` / `zsh -c` / `dash -c` are walked again, up to three levels. A fourth level is `unverified` even when the inner text is a script path. File reads still stop at eight referenced scripts.
+A payload that appears only inside a here-document body, or only after a backslash continuation, is not recovered. Mode 1 will not run the hook to find it.
 
 ## Trust and `PATH`
 

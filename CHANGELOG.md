@@ -54,6 +54,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A package that declares a trusted build command's `bin` name, and is not
   that command's publisher, is reported as `bin_shadow`. Hooks that call the
   bare name are `unverified` in that project.
+- A trusted command is not a trusted build when its arguments run shell
+  syntax. `$(...)` and backticks are walked like `sh -c`, including inside
+  double quotes. Process substitution, subshells, brace groups,
+  here-documents, and `eval` / `source` / `.` are `unverified`. Plain
+  `$NAME`, `${NAME}`, and output redirections such as `2>&1` stay trusted.
+  The same text inside single quotes stays literal.
 
 ### Changed
 
