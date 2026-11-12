@@ -248,14 +248,50 @@ fn render_cyclonedx(analysis: &Analysis, scanned_at: &str) -> Result<String> {
     Ok(format!("{text}\n"))
 }
 
+/// CycloneDX 1.6 scope and Lockward properties for one lockfile package.
+///
+/// `dev` is `excluded` (non-runtime) and records `lockward:dev`. `optional`
+/// without `dev` is `optional`. Anything else is `required`. `peer` does not
+/// change the scope; it records `lockward:peer`. Property values are strings
+/// and the list is sorted by name.
+fn scope_and_properties(
+    dev: bool,
+    optional: bool,
+    peer: bool,
+) -> (&'static str, Vec<(&'static str, &'static str)>) {
+    let mut properties = Vec::new();
+    let scope = if dev {
+        properties.push(("lockward:dev", "true"));
+        "excluded"
+    } else if optional {
+        "optional"
+    } else {
+        "required"
+    };
+    if peer {
+        properties.push(("lockward:peer", "true"));
+    }
+    properties.sort_by_key(|property| property.0);
+    (scope, properties)
+}
+
 fn component(package: &Package) -> Value {
     let mut value = json!({
         "type": "library",
         "name": package.name,
         "version": package.version,
         "purl": purl(&package.name, &package.version),
-        "scope": if package.dev { "optional" } else { "required" }
     });
+    let (scope, properties) = scope_and_properties(package.dev, package.optional, package.peer);
+    value["scope"] = json!(scope);
+    if !properties.is_empty() {
+        value["properties"] = json!(
+            properties
+                .iter()
+                .map(|(name, property_value)| json!({ "name": name, "value": property_value }))
+                .collect::<Vec<_>>()
+        );
+    }
     if let Some(license) = &package.license {
         value["licenses"] = json!([cyclonedx_license(license)]);
     }
@@ -603,6 +639,103 @@ mod tests {
         assert_eq!(
             cyclonedx_license("MIT OR NOPE"),
             json!({ "license": { "name": "MIT OR NOPE" } })
+        );
+    }
+
+    fn flagged_package(dev: bool, optional: bool, peer: bool) -> Package {
+        Package {
+            path: "node_modules/pkg".to_owned(),
+            name: "pkg".to_owned(),
+            version: "1.0.0".to_owned(),
+            resolved: None,
+            integrity: None,
+            dev,
+            optional,
+            peer,
+            is_root: false,
+            has_install_script: false,
+            license: None,
+            dependencies: std::collections::BTreeMap::new(),
+            dev_dependencies: std::collections::BTreeMap::new(),
+            optional_dependencies: std::collections::BTreeMap::new(),
+            peer_dependencies: std::collections::BTreeMap::new(),
+            bins: std::collections::BTreeMap::new(),
+        }
+    }
+
+    fn property_pairs(component: &Value) -> Vec<(String, String)> {
+        component["properties"]
+            .as_array()
+            .map(|items| {
+                items
+                    .iter()
+                    .map(|item| {
+                        (
+                            item["name"].as_str().unwrap_or("").to_owned(),
+                            item["value"].as_str().unwrap_or("").to_owned(),
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn required_package_has_no_scope_property() {
+        let value = component(&flagged_package(false, false, false));
+        assert_eq!(value["scope"], "required");
+        assert!(value.get("properties").is_none());
+    }
+
+    #[test]
+    fn optional_package_is_optional_without_a_dev_property() {
+        let value = component(&flagged_package(false, true, false));
+        assert_eq!(value["scope"], "optional");
+        assert!(property_pairs(&value).is_empty());
+    }
+
+    #[test]
+    fn dev_package_is_excluded_and_marked() {
+        let value = component(&flagged_package(true, false, false));
+        assert_eq!(value["scope"], "excluded");
+        assert_eq!(
+            property_pairs(&value),
+            vec![("lockward:dev".to_owned(), "true".to_owned())]
+        );
+    }
+
+    #[test]
+    fn dev_and_optional_stays_excluded() {
+        let value = component(&flagged_package(true, true, false));
+        assert_eq!(value["scope"], "excluded");
+        assert_eq!(
+            property_pairs(&value),
+            vec![("lockward:dev".to_owned(), "true".to_owned())]
+        );
+    }
+
+    #[test]
+    fn peer_keeps_scope_and_sets_a_string_property() {
+        let value = component(&flagged_package(false, false, true));
+        assert_eq!(value["scope"], "required");
+        assert_eq!(
+            property_pairs(&value),
+            vec![("lockward:peer".to_owned(), "true".to_owned())]
+        );
+        let raw = &value["properties"][0]["value"];
+        assert!(raw.is_string());
+    }
+
+    #[test]
+    fn dev_and_peer_properties_are_sorted() {
+        let value = component(&flagged_package(true, false, true));
+        assert_eq!(value["scope"], "excluded");
+        assert_eq!(
+            property_pairs(&value),
+            vec![
+                ("lockward:dev".to_owned(), "true".to_owned()),
+                ("lockward:peer".to_owned(), "true".to_owned()),
+            ]
         );
     }
 
