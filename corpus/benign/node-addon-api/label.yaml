@@ -1,5 +1,5 @@
 expected: benign
 expected_rules: []
 cohort: trusted_build
-source: "node-addon-api — legitimer nativer Rebuild, nicht auf der Allowlist"
-notes: "Held-out: legitimes Install-Script, Name steht nicht in der kuratierten Allowlist."
+source: "node-addon-api — legitimate native rebuild, not on the allowlist"
+notes: "Held out: legitimate install script. The name is not on the curated allowlist."

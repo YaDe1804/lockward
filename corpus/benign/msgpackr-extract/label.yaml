@@ -1,5 +1,5 @@
 expected: benign
 expected_rules: []
 cohort: inspected_clean
-source: "msgpackr-extract — lokales Install-Skript ohne Netzwerk, inerter Marker"
-notes: "Held-out: Datei wird gelesen und enthält kein Verdachtssignal."
+source: "msgpackr-extract — local install script with no network access, inert marker"
+notes: "Held out: the file is read and has no suspicious signal."

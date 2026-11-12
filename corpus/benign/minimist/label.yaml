@@ -1,4 +1,4 @@
 expected: benign
 expected_rules: []
 cohort: clean
-source: "minimist ohne Install-Hook — bereinigter Lockfile-Ausschnitt"
+source: "minimist with no install hook — cleaned lockfile excerpt"

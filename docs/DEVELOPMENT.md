@@ -1,24 +1,24 @@
-# Entwicklung
+# Development
 
-Interne Bau- und Qualitätsnotizen. Die öffentliche Projektbeschreibung steht in der README.
+Internal build and quality notes. The public project description is in the README.
 
 ## Layout
 
-| Pfad | Rolle |
+| Path | Role |
 | --- | --- |
-| `lockward-core` | Bibliothek: ingest, resolve, advisories, hooks, heuristics, score, policy, report |
+| `lockward-core` | Library: ingest, resolve, advisories, hooks, heuristics, score, policy, report |
 | `lockward-cli` | Binary `lockward` |
-| `.github/workflows` | CI und signierter Release |
-| `docs/adr` | Architekturentscheidungen |
+| `.github/workflows` | CI and the signed release |
+| `docs/adr` | Architecture decisions |
 
-Datenfluss: `Repo/Lockfile → ingest → resolve → (advisories | hooks | heuristics) → score → policy → report/CI-Gate`.
+Data flow: `repo/lockfile → ingest → resolve → (advisories | hooks | heuristics) → score → policy → report/CI gate`.
 
-## Voraussetzungen
+## Requirements
 
-- Rust stable (Edition 2024, `rustfmt`, `clippy`)
+- Rust stable (edition 2024, `rustfmt`, `clippy`)
 - optional: `cargo-nextest`, `cargo-audit`
 
-## Bauen und scannen
+## Build and scan
 
 ```powershell
 cargo build --release -p lockward-cli
@@ -29,13 +29,13 @@ cargo run -p lockward-cli -- scan . --format all --output .\out
 cargo run -p lockward-cli -- baseline . -o baseline.txt
 ```
 
-Exit-Codes: `0` ohne Verstoß, `1` Warnung oder Review, `2` Fail (nur im Modus `enforce`) oder Laufzeitfehler. Der Default-Modus ist `warn`.
+Exit codes: `0` with no finding, `1` warning or review, `2` fail (only in mode `enforce`) or a runtime error. The default mode is `warn`.
 
-## Grenzen
+## Limits
 
-Untrusted Input ist begrenzt: Lockfile höchstens 32 MiB und 100 000 Pakete, `package.json` höchstens 1 MiB (darüber Warnung und Skip), höchstens 2048 OSV-Detailabfragen pro Scan. Ein Überschreiten ist ein Fehler oder eine Warnung, kein stilles Weiterlesen.
+Untrusted input is bounded: a lockfile is at most 32 MiB and 100,000 packages, a `package.json` is at most 1 MiB (above that, warn and skip), and at most 2048 OSV detail queries per scan. Crossing a limit is an error or a warning, not a silent read-on.
 
-## Qualitätstor
+## Quality gate
 
 ```powershell
 cargo fmt --all

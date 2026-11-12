@@ -1,23 +1,23 @@
-# ADR 003 — Dependency-Graph und Zyklen
+# ADR 003 — Dependency graph and cycles
 
-## Kontext
+## Context
 
-AP1.2 baut aus der Paketliste den Graphen inklusive transitiver Kanten. npm-Lockfiles enthalten verschachtelte Kopien und echte Zyklen (`a → b → a`).
+AP1.2 builds the graph, including transitive edges, from the package list. npm lockfiles contain nested copies and real cycles (`a → b → a`).
 
-## Entscheidung
+## Decision
 
-- Knotenidentität ist der Lockfile-Pfad, Reihenfolge die Pfadsortierung aus dem Ingest.
-- Eine Kante wird über den Node-`node_modules`-Walk aufgelöst: zuerst `<paket>/node_modules/<name>`, dann jedes Elternverzeichnis.
-- Direkt ist nur, wer eine Kante vom Root-Eintrag (`""`) hat. Erreichbarkeit ist eine eigene Markierung; nicht verlinkte Einträge bleiben im Graph, gelten aber als unerreichbar.
-- Fehlende Ziele (optionale Plattformpakete, die nicht installiert sind) landen in `unresolved` und brechen den Lauf nicht ab.
-- Zyklen werden per DFS an der Rückkante aufgezeichnet. Der Pfad wiederholt den Startknoten am Ende. Der Aufbau liefert trotzdem den vollständigen Graphen.
+- Node identity is the lockfile path. Order is the path sort from ingest.
+- An edge is resolved with the Node `node_modules` walk: first `<package>/node_modules/<name>`, then each parent directory.
+- Only a package with an edge from the root entry (`""`) is direct. Reachability is a separate mark. Unlinked entries stay in the graph and count as unreachable.
+- Missing targets (optional platform packages that are not installed) go into `unresolved` and do not abort the run.
+- Cycles are recorded by DFS at the back edge. The path repeats the start node at the end. The build still returns the complete graph.
 
-## Begründung
+## Rationale
 
-Der Walk entspricht dem Verhalten von Node und unterscheidet eine verschachtelte Kopie von der Top-Level-Kopie. Zyklen sind in npm legal; ein Abbruch wäre ein False-Fail des Scanners.
+The walk matches Node and distinguishes a nested copy from the top-level copy. Cycles are legal in npm. Aborting would be a false fail of the scanner.
 
-## Alternativen
+## Alternatives
 
-- Semver-Range gegen alle Kandidaten matchen: ignoriert die physische Verschachtelung und wählt bei zwei `bar`-Versionen die falsche.
-- Zyklen als harten Fehler: widerspricht dem DoD.
-- `petgraph`: zusätzliche Abhängigkeit für einen kleinen, testbaren Walk.
+- Match a semver range against every candidate: ignores the physical nesting and picks the wrong `bar` when two versions exist.
+- Treat cycles as a hard error: conflicts with the definition of done.
+- `petgraph`: an extra dependency for a small, testable walk.

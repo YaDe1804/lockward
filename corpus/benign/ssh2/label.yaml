@@ -1,5 +1,5 @@
 expected: benign
 expected_rules: []
 cohort: trusted_build
-source: "ssh2 — legitimer nativer Rebuild, nicht auf der Allowlist"
-notes: "Held-out: legitimes Install-Script, Name steht nicht in der kuratierten Allowlist."
+source: "ssh2 — legitimate native rebuild, not on the allowlist"
+notes: "Held out: legitimate install script. The name is not on the curated allowlist."

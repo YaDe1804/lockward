@@ -1,5 +1,5 @@
 expected: benign
 expected_rules: []
 cohort: known_downloader
-source: "puppeteer — legitimer Browser-Download im Install-Text, URL example.invalid, nichts wird geholt"
-notes: "Harter FP-Kandidat: der Hook-Text enthält https.get, ausgeführt wird nur console.log."
+source: "puppeteer — legitimate browser download in the install text, URL example.invalid, nothing is fetched"
+notes: "Hard false-positive candidate: the hook text contains https.get. Only console.log runs."

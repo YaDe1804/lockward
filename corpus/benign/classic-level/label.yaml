@@ -1,5 +1,5 @@
 expected: benign
 expected_rules: []
 cohort: trusted_build
-source: "classic-level — node-gyp-build, Name nicht gelistet"
-notes: "Held-out: anderes Build-Tool als node-gyp."
+source: "classic-level — node-gyp-build, name not listed"
+notes: "Held out: a build tool other than node-gyp."

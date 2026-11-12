@@ -1,4 +1,4 @@
 expected: malicious
 expected_rules: [install_scripts]
-source: "event-stream 2018 (nur hasInstallScript) — rekonstruiertes Muster, inerter Payload"
-notes: "Lockfile-Flag ohne package.json. Der Script-Body ist nicht sichtbar."
+source: "event-stream 2018 (hasInstallScript only) — reconstructed pattern, inert payload"
+notes: "Lockfile flag without a package.json. The script body is not visible."
