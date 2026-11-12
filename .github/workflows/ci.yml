@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 permissions:
@@ -20,6 +22,7 @@ jobs:
 
       - uses: taiki-e/install-action@f360235162158ca4526b07999d99c38ade05a414 # cargo-nextest
       - uses: taiki-e/install-action@977cdbe2e748fc9d5798e3098868c4c4463bf31b # cargo-audit
+      - uses: taiki-e/install-action@98b24ef8830c90613ec3b57343df3abde2b66e56 # cargo-deny
 
       - name: Format
         run: cargo fmt --all -- --check
@@ -32,6 +35,9 @@ jobs:
 
       - name: Audit
         run: cargo audit
+
+      - name: Deny
+        run: cargo deny check
 
       - name: CycloneDX 1.6 schema
         run: |
