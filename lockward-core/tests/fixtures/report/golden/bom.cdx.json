@@ -2,6 +2,7 @@
   "bomFormat": "CycloneDX",
   "components": [
     {
+      "bom-ref": "pkg:npm/left-pad@1.0.0",
       "hashes": [
         {
           "alg": "SHA-512",
@@ -22,9 +23,28 @@
       "version": "1.0.0"
     }
   ],
+  "dependencies": [
+    {
+      "dependsOn": [],
+      "ref": "pkg:npm/left-pad@1.0.0"
+    },
+    {
+      "dependsOn": [
+        "pkg:npm/left-pad@1.0.0"
+      ],
+      "ref": "pkg:npm/mini-app@1.0.0"
+    }
+  ],
   "metadata": {
     "component": {
+      "bom-ref": "pkg:npm/mini-app@1.0.0",
       "name": "mini-app",
+      "properties": [
+        {
+          "name": "lockward:unresolved-edges",
+          "value": "0"
+        }
+      ],
       "purl": "pkg:npm/mini-app@1.0.0",
       "type": "application",
       "version": "1.0.0"
