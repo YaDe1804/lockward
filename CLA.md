@@ -1,8 +1,7 @@
 # Contributor License Agreement (Individual) — draft, needs legal review
 
-This is a draft adapted from the Lockward CLA. It is not legal advice and
-it has not been reviewed by counsel. Do not treat it as the final grant
-until that review is done.
+This draft is not legal advice and it has not been reviewed by counsel.
+Do not treat it as the final grant until that review is done.
 
 By submitting a contribution ("Contribution") to Lockward you, the
 contributor, agree with **Deniz Yayvan** to the following:
