@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `bun`. They are reported separately and must fail. Recall, precision,
   F1, and the false-positive rate stay on the 72-case corpus: recall 0.9375,
   precision 0.8824, false-positive rate 0.0357.
+- `napi-build` is not a trusted command. Published `unrs-resolver` 1.13.0
+  has no install script, so the corpus case is a clean package. The
+  `napi-postinstall` command downloads a native binding and is not trusted.
 - Known install tools and known downloaders are expected. A download that
   is not piped into a shell is review. The eval report separates fail and
   review.

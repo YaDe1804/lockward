@@ -17,13 +17,6 @@ use std::collections::BTreeSet;
 const TRUSTED_BIN_PUBLISHERS: &[(&str, &[&str])] = &[
     ("cmake-js", &["cmake-js"]),
     ("husky", &["husky"]),
-    // The package `napi-build` is not on the registry (HTTP 404).
-    // `@napi-rs/cli` 3.10.12 publishes `napi` and `napi-raw`.
-    // `node-gyp-build` 4.8.4 publishes `node-gyp-build`,
-    // `node-gyp-build-test`, and `node-gyp-build-optional`.
-    // `@ironblood/napi-cli-build` 3.4.1-alpha.1 is the package whose `bin`
-    // map names `napi-build`.
-    ("napi-build", &["@ironblood/napi-cli-build"]),
     ("node-gyp", &["node-gyp"]),
     ("node-gyp-build", &["node-gyp-build"]),
     // `node-pre-gyp` 0.17.0 and `@mapbox/node-pre-gyp` 2.0.3 both publish

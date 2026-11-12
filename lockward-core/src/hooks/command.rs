@@ -23,7 +23,6 @@ use std::path::Path;
 const TRUSTED_COMMANDS: &[&str] = &[
     "cmake-js",
     "husky",
-    "napi-build",
     "node-gyp",
     "node-gyp-build",
     "node-pre-gyp",

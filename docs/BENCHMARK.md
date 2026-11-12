@@ -46,10 +46,10 @@ False-positive rate by cohort:
 
 | Cohort               | Cases | FP-rate |
 |----------------------|------:|--------:|
-| trusted_build        | 19    | 0.00    |
+| trusted_build        | 18    | 0.00    |
 | inspected_clean      | 5     | 0.00    |
 | known_downloader     | 4     | 0.00    |
-| clean                | 24    | 0.00    |
+| clean                | 25    | 0.00    |
 | heuristic_probe      | 2     | 0.00    |
 | residual_downloader  | 2     | 1.00    |
 

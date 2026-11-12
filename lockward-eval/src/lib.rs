@@ -977,6 +977,9 @@ mod tests {
         assert_eq!(case("benign/prisma").severity, "review");
         assert_eq!(case("malicious/ua-parser-js-staged").severity, "fail");
         assert_eq!(case("malicious/staged-binary").severity, "fail");
+        assert!(!case("benign/unrs-resolver").flagged);
+        assert_eq!(case("benign/unrs-resolver").cohort, "clean");
+        assert_eq!(case("benign/unrs-resolver").severity, "info");
         let regression = |id: &str| {
             report
                 .regression
